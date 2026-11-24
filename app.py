@@ -11,7 +11,12 @@ import streamlit as st
 
 from src.database import Database
 from src.document_parser import DocumentParser, DocumentValidationError
-from src.gemini_service import GeminiService
+from src.gemini_service import (
+    GeminiService,
+    load_gemini_api_key,
+    AVAILABLE_MODELS,
+    DEFAULT_MODEL,
+)
 from src.resume_analyzer import ResumeAnalyzer
 from src.job_matcher import JobMatcher
 from src.interview_coach import InterviewCoach
@@ -43,21 +48,24 @@ def get_database():
 
 db = get_database()
 
-def load_gemini_api_key() -> str:
-    """Load the Gemini key from Streamlit Secrets, then environment variables."""
-    try:
-        secret_key = st.secrets.get("GEMINI_API_KEY", "")
-    except Exception:
-        # Streamlit Secrets may be unavailable during local development.
-        secret_key = ""
-    return str(secret_key or os.environ.get("GEMINI_API_KEY", "")).strip()
-
-
-if "gemini_api_key" not in st.session_state:
-    st.session_state.gemini_api_key = load_gemini_api_key()
+# API Key and Gemini Service Initialization with Secrets Auto-Sync
+current_gemini_key = load_gemini_api_key()
 
 if "gemini_service" not in st.session_state:
-    st.session_state.gemini_service = GeminiService(api_key=st.session_state.gemini_api_key)
+    st.session_state.gemini_api_key = current_gemini_key
+    st.session_state.gemini_service = GeminiService(
+        api_key=current_gemini_key,
+        model_name=DEFAULT_MODEL,
+    )
+else:
+    # If session state was initialized before secrets were configured or key changed,
+    # automatically synchronize without requiring session reset
+    if current_gemini_key and (
+        not st.session_state.gemini_service.is_configured()
+        or st.session_state.gemini_service.api_key != current_gemini_key
+    ):
+        st.session_state.gemini_api_key = current_gemini_key
+        st.session_state.gemini_service.set_api_key(current_gemini_key)
 
 if "active_resume_data" not in st.session_state:
     st.session_state.active_resume_data = None
@@ -115,13 +123,27 @@ with st.sidebar:
     else:
         st.caption("Gemini API key is not configured. Using deterministic fallback mode.")
 
-    # Model Selection
+    # Model Selection (verified via Google GenAI SDK where possible)
+    models_list, is_live_verified = st.session_state.gemini_service.get_available_models()
+    current_model = st.session_state.gemini_service.model_name
+    if current_model not in models_list:
+        current_model = DEFAULT_MODEL
+        st.session_state.gemini_service.model_name = current_model
+
+    model_idx = models_list.index(current_model) if current_model in models_list else 0
     selected_model = st.selectbox(
         "Gemini Model",
-        ["gemini-3.8-flash"],
-        index=0,
+        models_list,
+        index=model_idx,
+        help="Select Gemini model. 'gemini-3.8-flash' is the primary model with automatic failover to 'gemini-3.5-flash-lite'.",
     )
-    st.session_state.gemini_service.model_name = selected_model
+    if selected_model != st.session_state.gemini_service.model_name:
+        st.session_state.gemini_service.model_name = selected_model
+
+    if is_live_verified:
+        st.caption("✅ Live model access confirmed for project.")
+    elif st.session_state.gemini_service.is_configured():
+        st.caption("ℹ️ Unverified default models shown (click 'Test API' to verify).")
 
     col_btn, col_badge = st.columns([1, 1])
     with col_btn:
@@ -139,6 +161,20 @@ with st.sidebar:
         else:
             st.markdown("<span style='color: #64748B; font-weight:600;'>○ Fallback Mode</span>", unsafe_allow_html=True)
 
+    if not st.session_state.gemini_service.is_configured():
+        with st.expander("ℹ️ Secrets Setup Guide", expanded=False):
+            st.markdown(
+                """
+                **Streamlit Community Cloud:**
+                1. Go to **App Settings** > **Secrets**.
+                2. Add your key:
+                ```toml
+                GEMINI_API_KEY = "AIzaSy..."
+                ```
+                3. Click **Save** then **🔄 Sync Secrets** below.
+                """
+            )
+
     st.divider()
 
     # Database Quick Stats
@@ -149,11 +185,27 @@ with st.sidebar:
     st.write(f"- **Interview Runs:** {stats['interviews_count']}")
     st.write(f"- **Roadmaps:** {stats['roadmaps_count']}")
 
-    if st.button("🗑️ Clear Active Session", width="stretch"):
-        st.session_state.active_resume_data = None
-        st.session_state.active_resume_text = ""
-        st.session_state.active_resume_id = None
-        st.rerun()
+    col_sync, col_clear = st.columns([1, 1])
+    with col_sync:
+        if st.button("🔄 Sync Secrets", width="stretch", help="Reload API key from secrets or environment"):
+            reloaded_key = load_gemini_api_key()
+            st.session_state.gemini_api_key = reloaded_key
+            st.session_state.gemini_service.set_api_key(reloaded_key)
+            if st.session_state.gemini_service.is_configured():
+                st.success("Secrets synced!")
+            else:
+                st.warning("No API key detected in secrets.")
+            st.rerun()
+
+    with col_clear:
+        if st.button("🗑️ Clear Session", width="stretch", help="Reset active resume data and reload secrets"):
+            st.session_state.active_resume_data = None
+            st.session_state.active_resume_text = ""
+            st.session_state.active_resume_id = None
+            reloaded_key = load_gemini_api_key()
+            st.session_state.gemini_api_key = reloaded_key
+            st.session_state.gemini_service.set_api_key(reloaded_key)
+            st.rerun()
 
 
 # ==============================================================================

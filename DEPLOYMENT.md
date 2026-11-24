@@ -13,15 +13,19 @@ CareerPilot AI is packaged for zero-dependency local execution, Docker container
 
 ### Steps
 1. Push your repository to GitHub.
-2. Sign in to **Streamlit Community Cloud** and click **Create app**.
-3. Select your repository, set the branch to `main`, and set **Main file path** to `app.py`.
-4. Open **Advanced settings**:
-   * **Python version**: Select `3.11` (enforced via repository `.python-version`).
-   * **Secrets**: Add your Gemini API Key in TOML format:
-     ```toml
-     GEMINI_API_KEY = "AIzaSy..."
-     ```
-5. Click **Deploy!**
+2. Sign in to **Streamlit Community Cloud** and select your app settings.
+3. In **App Settings** > **Secrets**, enter your Gemini API Key in valid TOML format:
+   ```toml
+   GEMINI_API_KEY = "AIzaSy..."
+   ```
+   > **Note on quotes:** The app automatically strips accidental leading/trailing quotes, whitespace, and handles case-insensitive naming (`gemini_api_key`, `GOOGLE_API_KEY`, or `[gemini] api_key = "..."`).
+4. Click **Save**.
+5. In the app sidebar, click **🔄 Sync Secrets** or **Test API** to verify immediate connectivity.
+
+### Supported Models for Gemini Free Tier
+* **`gemini-3.8-flash`** (Primary Default): Google's workhorse multimodal Flash model for complex agentic and reasoning tasks.
+* **`gemini-3.5-flash-lite`** (Direct Fallback): Ultra-low latency, high-throughput model optimized for high availability during peak traffic spikes.
+> **Note on Model Availability:** Model availability is determined by Google AI Studio and project enablement. Do not assume older models (such as `gemini-2.0-flash` or `gemini-1.5-flash`) are supported or available for new Google Cloud projects. The application dynamically queries available models via Google GenAI SDK discovery when connected.
 
 ### Storage Architecture Note on Community Cloud
 * Streamlit Community Cloud utilizes **ephemeral container storage**. Any new records written to `data/careerpilot.db` will persist throughout the running container lifecycle but will reset when the app is rebooted or redeployed.
