@@ -107,17 +107,13 @@ with st.sidebar:
 
     # Gemini API Configuration
     st.markdown("### 🔑 AI Service Settings")
-    input_key = st.text_input(
-        "Gemini API Key",
-        value=st.session_state.gemini_api_key,
-        type="password",
-        help="Input your Gemini API Key. If left blank, CareerPilot operates seamlessly with its deterministic rule-based intelligence engine.",
-    )
-
-    if input_key != st.session_state.gemini_api_key:
-        st.session_state.gemini_api_key = input_key
-        st.session_state.gemini_service.set_api_key(input_key)
-        st.success("API key updated!")
+    # Never render the server-side API key in the public app UI.
+    # Configure GEMINI_API_KEY through Streamlit Community Cloud Secrets
+    # or a local environment variable instead.
+    if st.session_state.gemini_service.is_configured():
+        st.caption("Gemini API key is securely loaded from server configuration.")
+    else:
+        st.caption("Gemini API key is not configured. Using deterministic fallback mode.")
 
     # Model Selection
     selected_model = st.selectbox(
