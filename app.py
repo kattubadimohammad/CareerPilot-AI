@@ -43,8 +43,18 @@ def get_database():
 
 db = get_database()
 
+def load_gemini_api_key() -> str:
+    """Load the Gemini key from Streamlit Secrets, then environment variables."""
+    try:
+        secret_key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        # Streamlit Secrets may be unavailable during local development.
+        secret_key = ""
+    return str(secret_key or os.environ.get("GEMINI_API_KEY", "")).strip()
+
+
 if "gemini_api_key" not in st.session_state:
-    st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+    st.session_state.gemini_api_key = load_gemini_api_key()
 
 if "gemini_service" not in st.session_state:
     st.session_state.gemini_service = GeminiService(api_key=st.session_state.gemini_api_key)
