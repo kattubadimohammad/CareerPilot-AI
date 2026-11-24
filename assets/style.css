@@ -1,0 +1,147 @@
+/* Modern CSS Styling for CareerPilot AI */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Hero Banner */
+.hero-container {
+    background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+    padding: 2.2rem 2.5rem;
+    border-radius: 16px;
+    color: white;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.25);
+}
+
+.hero-title {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin-bottom: 0.4rem;
+    letter-spacing: -0.025em;
+    color: #FFFFFF !important;
+}
+
+.hero-tagline {
+    font-size: 1.15rem;
+    font-weight: 400;
+    opacity: 0.95;
+    margin: 0;
+    color: #E0E7FF !important;
+}
+
+/* Metric Cards */
+.metric-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.metric-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748B;
+    margin-bottom: 0.25rem;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0F172A;
+}
+
+/* Badges and Skill Pills */
+.skill-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    margin: 3px 4px;
+    border-radius: 9999px;
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+
+.pill-matched {
+    background-color: #DCFCE7;
+    color: #166534;
+    border: 1px solid #86EFAC;
+}
+
+.pill-missing {
+    background-color: #FEE2E2;
+    color: #991B1B;
+    border: 1px solid #FCA5A5;
+}
+
+.pill-neutral {
+    background-color: #EFF6FF;
+    color: #1E40AF;
+    border: 1px solid #BFDBFE;
+}
+
+.pill-priority-p0 {
+    background-color: #FEF2F2;
+    color: #B91C1C;
+    border: 1px solid #F87171;
+    font-weight: 600;
+}
+
+.pill-priority-p1 {
+    background-color: #FFFBEB;
+    color: #B45309;
+    border: 1px solid #FCD34D;
+    font-weight: 600;
+}
+
+.pill-priority-p2 {
+    background-color: #F0FDF4;
+    color: #15803D;
+    border: 1px solid #86EFAC;
+}
+
+/* Guardrail Banner */
+.guardrail-box {
+    background-color: #EFF6FF;
+    border-left: 4px solid #2563EB;
+    padding: 1rem 1.25rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1.2rem 0;
+    color: #1E3A8A;
+    font-size: 0.9rem;
+}
+
+/* Provider badge */
+.provider-badge-ai {
+    display: inline-flex;
+    align-items: center;
+    background: #E0E7FF;
+    color: #3730A3;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.8rem;
+}
+
+.provider-badge-fallback {
+    display: inline-flex;
+    align-items: center;
+    background: #F1F5F9;
+    color: #475569;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.8rem;
+}
