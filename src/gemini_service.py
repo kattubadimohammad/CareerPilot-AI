@@ -28,6 +28,9 @@ DEFAULT_UNVERIFIED_MODELS: List[str] = [
     "gemini-3.5-flash",
 ]
 
+# Alias for backwards compatibility with modules expecting AVAILABLE_MODELS
+AVAILABLE_MODELS: List[str] = DEFAULT_UNVERIFIED_MODELS
+
 
 def load_gemini_api_key() -> str:
     """Safely extracts and sanitizes the Gemini API key from Streamlit Secrets or Environment Variables.

@@ -1,7 +1,7 @@
 # CareerPilot AI 🚀
 > **Your Career. Your Potential. Powered by AI.**
 
-[![CI Test Suite](https://img.shields.io/badge/pytest-55%20passed-brightgreen.svg)](tests/)
+[![CI Test Suite](https://img.shields.io/badge/pytest-57%20passed-brightgreen.svg)](tests/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![Streamlit App](https://img.shields.io/badge/Streamlit-1.40+-FF4B4B.svg)](https://streamlit.io/)
 [![Google GenAI](https://img.shields.io/badge/Gemini%20API-Free--Tier%20Ready-orange.svg)](https://aistudio.google.com/)
@@ -122,7 +122,7 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ## 🧪 Running Automated Tests
 
-The application features a complete test suite with **55 automated tests** covering database CRUD, document parsing, validation errors, Gemini service fallbacks, secret loading and quote sanitization, model migration and failover, ATS scoring, STAR rubric evaluation, and an end-to-end integration test:
+The application features a complete test suite with **57 automated tests** covering database CRUD, document parsing, validation errors, Gemini service fallbacks, secret loading and quote sanitization, model migration and failover, ATS scoring, STAR rubric evaluation, and an end-to-end integration test:
 
 ```bash
 # Run all tests with pytest
@@ -131,7 +131,7 @@ python -m pytest tests/ -v
 
 Output:
 ```
-============================= 55 passed in 51.7s ==============================
+============================= 57 passed in 32.15s ==============================
 ```
 
 ---

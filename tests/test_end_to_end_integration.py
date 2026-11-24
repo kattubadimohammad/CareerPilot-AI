@@ -131,3 +131,13 @@ def test_full_careerpilot_flow():
         assert stats["interviews_count"] == 1
         assert stats["roadmaps_count"] == 1
         assert stats["avg_match_score"] == match_result["overall_score"]
+
+
+def test_app_imports_and_renders_without_exceptions():
+    """Verify that app.py imports all dependencies and executes without runtime exceptions."""
+    from streamlit.testing.v1 import AppTest
+
+    app_path = Path(__file__).resolve().parent.parent / "app.py"
+    at = AppTest.from_file(str(app_path), default_timeout=30)
+    at.run()
+    assert len(at.exception) == 0, f"App execution raised unexpected exceptions: {at.exception}"

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.gemini_service import (
+    AVAILABLE_MODELS,
     DEFAULT_MODEL,
     DEFAULT_UNVERIFIED_MODELS,
     PREFERRED_MODELS,
@@ -104,6 +105,13 @@ def test_gemini_primary_model_preference():
 
     service = GeminiService()
     assert service.model_name == "gemini-3.8-flash"
+
+
+def test_gemini_available_models_export():
+    assert isinstance(AVAILABLE_MODELS, list)
+    assert len(AVAILABLE_MODELS) > 0
+    assert DEFAULT_MODEL in AVAILABLE_MODELS
+    assert AVAILABLE_MODELS == DEFAULT_UNVERIFIED_MODELS
 
 
 def test_gemini_model_discovery_success():

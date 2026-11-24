@@ -14,7 +14,6 @@ from src.document_parser import DocumentParser, DocumentValidationError
 from src.gemini_service import (
     GeminiService,
     load_gemini_api_key,
-    AVAILABLE_MODELS,
     DEFAULT_MODEL,
 )
 from src.resume_analyzer import ResumeAnalyzer
