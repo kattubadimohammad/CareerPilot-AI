@@ -1,0 +1,82 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+*.tmp
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+.env/
+
+# Secrets, Credentials & Environment variables
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.pfx
+secrets.toml
+.streamlit/secrets.toml
+
+# SQLite databases & runtime locks
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.backup
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*.db.backup
+
+# Personal Resumes & Uploads (preserves tracked sample demo files only)
+uploads/
+data/uploads/
+*.pdf
+*.docx
+!data/sample_resume.pdf
+!data/sample_resume.docx
+
+# Streamlit logs
+streamlit_*.log
+*.log
+
+# Pytest & Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.junit/
+
+# IDE & OS specific files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

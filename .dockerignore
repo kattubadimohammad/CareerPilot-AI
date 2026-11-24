@@ -1,0 +1,62 @@
+.venv/
+env/
+venv/
+ENV/
+.env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# SQLite databases & backups
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.backup
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/*.db.backup
+
+# Secrets, credentials & environment files
+.env
+.env.*
+!.env.example
+secrets.toml
+.streamlit/secrets.toml
+*.pem
+*.key
+*.cert
+*.pfx
+
+# Personal resumes and user uploads (preserves sample demo files)
+uploads/
+data/uploads/
+*.pdf
+*.docx
+!data/sample_resume.pdf
+!data/sample_resume.docx
+
+# Git metadata
+.git/
+.gitignore
+
+# Pytest & coverage caches
+.pytest_cache/
+.coverage
+htmlcov/
+.junit/
+
+# Logs
+*.log
+streamlit_*.log
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
