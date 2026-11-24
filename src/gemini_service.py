@@ -31,63 +31,102 @@ DEFAULT_UNVERIFIED_MODELS: List[str] = [
 # Alias for backwards compatibility with modules expecting AVAILABLE_MODELS
 AVAILABLE_MODELS: List[str] = DEFAULT_UNVERIFIED_MODELS
 
+# Active Git commit identifier for deployment tracking
+CURRENT_COMMIT: str = "3e9a024"
 
-def load_gemini_api_key() -> str:
-    """Safely extracts and sanitizes the Gemini API key from Streamlit Secrets or Environment Variables.
 
-    Checks:
-    1. Streamlit secrets: GEMINI_API_KEY, gemini_api_key, GOOGLE_API_KEY, google_api_key,
-       GEMINI_KEY, gemini_key, or nested [gemini] / [general] / [google] tables.
-    2. Environment variables: GEMINI_API_KEY, GOOGLE_API_KEY.
+def _extract_key_and_source(force_refresh: bool = False) -> Tuple[str, str, Optional[str], List[str], bool]:
+    """Internal helper to locate Gemini API key across Streamlit Secrets and Environment Variables.
 
-    Strips accidental surrounding quotes (single and double) and whitespace.
+    Checks only explicitly prioritized and documented names:
+    1. Root secrets: GEMINI_API_KEY, gemini_api_key, GOOGLE_API_KEY, google_api_key
+    2. Documented nested tables:
+       - [gemini] api_key, GEMINI_API_KEY, gemini_api_key
+       - [google] api_key, GOOGLE_API_KEY, google_api_key
+       - [general] GEMINI_API_KEY, gemini_api_key, api_key
+    3. Environment variables: GEMINI_API_KEY, GOOGLE_API_KEY
+
+    Never scans arbitrary secret values or unrelated credentials.
+
+    Returns:
+        (raw_key, source_description, error_message, detected_secret_keys, st_secrets_accessible)
     """
     raw_key = ""
+    source_detected = "None (no key detected in secrets or environment)"
+    error_msg: Optional[str] = None
+    detected_keys: List[str] = []
+    st_secrets_ok = False
 
-    # 1. Check Streamlit Secrets
+    # 1. Check Streamlit Secrets using standard public mapping API
     try:
         import streamlit as st
         if hasattr(st, "secrets"):
-            candidate_keys = [
+            st_secrets_ok = True
+            try:
+                detected_keys = [str(k) for k in st.secrets.keys()]
+            except Exception:
+                detected_keys = []
+
+            # Prioritized explicitly supported root key names
+            primary_root_keys = [
                 "GEMINI_API_KEY",
                 "gemini_api_key",
                 "GOOGLE_API_KEY",
                 "google_api_key",
-                "GEMINI_KEY",
-                "gemini_key",
             ]
-            for candidate in candidate_keys:
-                if candidate in st.secrets:
-                    val = st.secrets[candidate]
+            for ck in primary_root_keys:
+                if ck in st.secrets:
+                    val = st.secrets[ck]
                     if val and str(val).strip():
                         raw_key = str(val)
+                        source_detected = f"st.secrets['{ck}']"
                         break
 
-            # Check nested table: [gemini] api_key = "..."
-            if not raw_key and "gemini" in st.secrets:
-                g_sec = st.secrets["gemini"]
-                if isinstance(g_sec, dict) or hasattr(g_sec, "get"):
-                    raw_key = g_sec.get("api_key") or g_sec.get("GEMINI_API_KEY") or ""
+            # Documented nested structures
+            if not raw_key:
+                documented_tables = {
+                    "gemini": ["api_key", "GEMINI_API_KEY", "gemini_api_key"],
+                    "google": ["api_key", "GOOGLE_API_KEY", "google_api_key"],
+                    "general": ["GEMINI_API_KEY", "gemini_api_key", "api_key"],
+                }
+                for tbl_name, field_names in documented_tables.items():
+                    if tbl_name in st.secrets:
+                        sec_val = st.secrets[tbl_name]
+                        if isinstance(sec_val, dict) or hasattr(sec_val, "get"):
+                            for field in field_names:
+                                sub_val = sec_val.get(field) if hasattr(sec_val, "get") else None
+                                if sub_val and str(sub_val).strip():
+                                    raw_key = str(sub_val)
+                                    source_detected = f"st.secrets['{tbl_name}']['{field}']"
+                                    break
+                        if raw_key:
+                            break
+    except Exception as e:
+        st_secrets_ok = False
+        error_msg = f"{type(e).__name__}: {str(e)[:120]}"
 
-            # Check nested table: [general] GEMINI_API_KEY = "..."
-            if not raw_key and "general" in st.secrets:
-                gen_sec = st.secrets["general"]
-                if isinstance(gen_sec, dict) or hasattr(gen_sec, "get"):
-                    raw_key = gen_sec.get("GEMINI_API_KEY") or gen_sec.get("api_key") or ""
-
-            # Check nested table: [google] api_key = "..."
-            if not raw_key and "google" in st.secrets:
-                goog_sec = st.secrets["google"]
-                if isinstance(goog_sec, dict) or hasattr(goog_sec, "get"):
-                    raw_key = goog_sec.get("api_key") or goog_sec.get("GEMINI_API_KEY") or ""
-    except Exception:
-        # Streamlit Secrets may be unavailable in unit tests or local non-streamlit runs
-        pass
-
-    # 2. Check Environment Variables
+    # 2. Check Environment Variables (explicitly prioritized names only)
     if not raw_key:
-        raw_key = os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")
+        for env_k in ["GEMINI_API_KEY", "GOOGLE_API_KEY"]:
+            val = os.environ.get(env_k, "")
+            if val and str(val).strip():
+                raw_key = str(val)
+                source_detected = f"os.environ['{env_k}']"
+                break
 
+    return raw_key, source_detected, error_msg, detected_keys, st_secrets_ok
+
+
+def load_gemini_api_key(force_refresh: bool = False) -> str:
+    """Safely extracts and sanitizes the Gemini API key from Streamlit Secrets or Environment Variables.
+
+    Checks:
+    1. Streamlit secrets: root keys, nested tables, and project sections.
+    2. Environment variables: GEMINI_API_KEY, GOOGLE_API_KEY.
+
+    Strips accidental surrounding quotes (ASCII and Unicode smart quotes) and whitespace.
+    """
+    raw_key, _, _, _, _ = _extract_key_and_source(force_refresh=force_refresh)
     return GeminiService.sanitize_key(raw_key)
 
 
@@ -99,60 +138,118 @@ class GeminiService:
         self.api_key = self.sanitize_key(raw_key)
         self.model_name = model_name or DEFAULT_MODEL
         self._client = None
+        self._last_client_error: Optional[str] = None
         self._live_models_cache: Optional[List[str]] = None
         if self.api_key:
             self._init_client()
 
     @staticmethod
     def sanitize_key(raw_key: Any) -> str:
-        """Sanitize an API key string by stripping whitespace and wrapping quotation marks."""
+        """Sanitize an API key string by stripping whitespace, hidden unicode, and quotes."""
         if not raw_key:
             return ""
-        key = str(raw_key).strip()
-        # Repeatedly strip surrounding single or double quotes
-        while len(key) >= 2 and (
-            (key[0] == '"' and key[-1] == '"')
-            or (key[0] == "'" and key[-1] == "'")
-        ):
-            key = key[1:-1].strip()
+        key = str(raw_key).strip(" \t\r\n\x00\xa0\u200b")
+        # Repeatedly strip surrounding ASCII and Unicode quotation marks
+        quote_chars = ('"', "'", '“', '”', '‘', '’', '`')
+        while len(key) >= 1 and (key[0] in quote_chars or key[-1] in quote_chars):
+            if key[0] in quote_chars:
+                key = key[1:]
+            if key and key[-1] in quote_chars:
+                key = key[:-1]
+            key = key.strip(" \t\r\n\x00\xa0\u200b")
+        if key.startswith("Bearer "):
+            key = key[7:].strip()
         return key
 
     def set_api_key(self, api_key: str) -> None:
         """Update API key at runtime (e.g. via Streamlit secrets sync)."""
         self.api_key = self.sanitize_key(api_key)
         self._live_models_cache = None
+        self._last_client_error = None
         self._init_client()
+
+    def sync_with_secrets(self, force_refresh: bool = True) -> bool:
+        """Refresh API key directly from secrets and reinitialize client."""
+        reloaded = load_gemini_api_key(force_refresh=force_refresh)
+        self.set_api_key(reloaded)
+        return self.is_configured()
 
     def _init_client(self) -> None:
         """Initialize Google GenAI client safely."""
         if not self.api_key:
             self._client = None
+            self._last_client_error = None
             return
         try:
             from google import genai
             self._client = genai.Client(api_key=self.api_key)
+            self._last_client_error = None
         except Exception as e:
-            logger.warning("Failed to initialize Gemini client: %s", self._scrub_sensitive_string(str(e)))
+            err = self._scrub_sensitive_string(str(e))
+            logger.warning("Failed to initialize Gemini client: %s", err)
+            self._last_client_error = err
             self._client = None
 
     def is_configured(self) -> bool:
         """Structural format check for a valid Google Gemini API Key.
 
         Separates credential syntax checking from live network connection testing.
-        Valid Google AI Studio keys start with 'AIza' and contain 35-45 base64url characters.
-        Arbitrary 10-character strings or placeholders are rejected.
+        Valid keys have reasonable length (25-128 chars), use valid token characters,
+        and do not contain dummy placeholders.
         """
         if not self.api_key:
             return False
-        cleaned = self.api_key.strip().strip("'\"")
-        if not cleaned.startswith("AIza"):
-            return False
-        if len(cleaned) < 30 or len(cleaned) > 55:
+        cleaned = self.sanitize_key(self.api_key)
+        if len(cleaned) < 25 or len(cleaned) > 128:
             return False
         # Reject obvious non-key placeholders
-        if any(p in cleaned.lower() for p in ["your_key", "placeholder", "dummy"]):
+        if any(p in cleaned.lower() for p in ["your_key", "placeholder", "dummy", "your_gemini", "test_key", "example_key"]):
             return False
-        return bool(re.match(r"^AIza[0-9A-Za-z-_]{26,50}$", cleaned))
+        # Must only contain valid base64 / token characters
+        if not re.match(r"^[0-9A-Za-z\-_+=./]+$", cleaned):
+            return False
+        return True
+
+    def get_diagnostic_info(self) -> Dict[str, Any]:
+        """Collect safe diagnostic information for the sidebar without exposing any credentials.
+
+        Never returns key values or partial keys.
+        """
+        raw_key, source, sec_err, sec_keys, sec_accessible = _extract_key_and_source(force_refresh=False)
+        cleaned = self.sanitize_key(raw_key or self.api_key)
+
+        key_present = bool(cleaned)
+        key_len = len(cleaned) if key_present else 0
+        starts_aiza = cleaned.startswith("AIza") if key_present else False
+        configured = self.is_configured()
+
+        if not key_present:
+            format_status = "No key detected in configuration"
+        elif not configured:
+            if key_len < 25:
+                format_status = f"Rejected: Key too short ({key_len} chars, expected >= 25)"
+            elif any(p in cleaned.lower() for p in ["your_key", "placeholder", "dummy"]):
+                format_status = "Rejected: Placeholder key detected"
+            else:
+                format_status = "Rejected: Invalid token characters detected"
+        else:
+            format_status = "Valid key format" if starts_aiza else "Accepted: Non-standard key format"
+
+        return {
+            "git_commit": CURRENT_COMMIT,
+            "st_secrets_available": sec_accessible,
+            "st_secrets_keys": sec_keys,
+            "st_secrets_error": sec_err,
+            "source_detected": source,
+            "key_detected": key_present,
+            "key_length": key_len,
+            "starts_with_aiza": starts_aiza,
+            "is_configured": configured,
+            "format_status": format_status,
+            "client_initialized": self._client is not None,
+            "client_error": self._last_client_error,
+            "active_model": self.model_name,
+        }
 
     def _scrub_sensitive_string(self, text: str) -> str:
         """Ensure no API key or credential is leaked into error messages or logs."""

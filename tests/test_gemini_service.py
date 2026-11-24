@@ -68,6 +68,11 @@ def test_gemini_sanitize_key():
     assert GeminiService.sanitize_key("'AIzaSyValidKey1234567890123456789012'") == "AIzaSyValidKey1234567890123456789012"
     assert GeminiService.sanitize_key('""AIzaSyValidKey1234567890123456789012""') == "AIzaSyValidKey1234567890123456789012"
     assert GeminiService.sanitize_key('  "AIzaSyValidKey1234567890123456789012"  ') == "AIzaSyValidKey1234567890123456789012"
+    # Smart quotes & bearer prefixes
+    assert GeminiService.sanitize_key('“AIzaSyValidKey1234567890123456789012”') == "AIzaSyValidKey1234567890123456789012"
+    assert GeminiService.sanitize_key('‘AIzaSyValidKey1234567890123456789012’') == "AIzaSyValidKey1234567890123456789012"
+    assert GeminiService.sanitize_key('`AIzaSyValidKey1234567890123456789012`') == "AIzaSyValidKey1234567890123456789012"
+    assert GeminiService.sanitize_key('Bearer AIzaSyValidKey1234567890123456789012') == "AIzaSyValidKey1234567890123456789012"
 
 
 def test_gemini_is_configured_strict_format_validation():
@@ -75,20 +80,23 @@ def test_gemini_is_configured_strict_format_validation():
     valid_key = "AIzaSyFakeKeyForTestingPurposes1234567"
     assert GeminiService(api_key=valid_key).is_configured() is True
     assert GeminiService(api_key=f'"{valid_key}"').is_configured() is True
+    assert GeminiService(api_key=f'“{valid_key}”').is_configured() is True
 
-    # Must NOT be considered configured merely because it has 10+ characters
-    arbitrary_strings = [
+    # Valid base64 / Google Cloud key with + / = characters
+    valid_cloud_key = "AIzaSyTestKeyWithSpecial+Chars/123456=="
+    assert GeminiService(api_key=valid_cloud_key).is_configured() is True
+
+    # Must NOT be considered configured merely because it has characters or is a placeholder
+    bad_strings = [
+        "",
         "1234567890",
-        "abcdefghijklmnopqrstuvwxyz",
-        "sk-ant-api03-abcdefghijklmn1234567890",
-        "not_an_aiza_key_12345678901234567890",
-        "AIzaShort",                     # Too short (<30 chars)
-        "AIza" + "x" * 60,               # Too long (>55 chars)
+        "AIzaShort",                     # Too short (<25 chars)
         "AIzaSy_placeholder_key_example_12345",  # Placeholder substring
         "AIzaSy_dummy_key_not_real_1234567890",  # Dummy substring
         "your_gemini_api_key_here",
+        "key with spaces inside 12345678901234567890",
     ]
-    for bad_key in arbitrary_strings:
+    for bad_key in bad_strings:
         svc = GeminiService(api_key=bad_key)
         assert svc.is_configured() is False, f"Key '{bad_key}' should not pass is_configured()"
 
@@ -210,6 +218,50 @@ def test_load_gemini_api_key_missing_everywhere():
     with patch("streamlit.secrets", {}, create=True):
         with patch.dict(os.environ, {}, clear=True):
             assert load_gemini_api_key() == ""
+
+
+def test_load_gemini_api_key_documented_nested_table():
+    # Documented nested tables [gemini] and [google]
+    mock_secrets_google = {"google": {"api_key": "AIzaSyDocumentedGoogleKey12345"}}
+    with patch("streamlit.secrets", mock_secrets_google, create=True):
+        assert load_gemini_api_key() == "AIzaSyDocumentedGoogleKey12345"
+
+    mock_secrets_gemini = {"gemini": {"api_key": "AIzaSyDocumentedGeminiKey12345"}}
+    with patch("streamlit.secrets", mock_secrets_gemini, create=True):
+        assert load_gemini_api_key() == "AIzaSyDocumentedGeminiKey12345"
+
+
+def test_load_gemini_api_key_never_selects_unrelated_credentials():
+    # Secrets containing unrelated credentials in other tables must NOT be selected
+    unrelated_secrets = {
+        "database": {"password": "AIzaSyDatabasePasswordDoNotSelect123"},
+        "stripe": {"secret_key": "AIzaSyStripeSecretKeyDoNotSelect123"},
+        "analytics": {"token": "AIzaSyAnalyticsTokenDoNotSelect123"},
+    }
+    with patch("streamlit.secrets", unrelated_secrets, create=True):
+        with patch.dict(os.environ, {}, clear=True):
+            assert load_gemini_api_key() == ""
+
+
+def test_gemini_diagnostic_info_structure():
+    mock_secrets = {"GEMINI_API_KEY": "AIzaSySecretDiagnosticKey12345"}
+    with patch("streamlit.secrets", mock_secrets, create=True):
+        service = GeminiService(api_key="AIzaSySecretDiagnosticKey12345")
+        diag = service.get_diagnostic_info()
+
+        assert diag["git_commit"] == "3e9a024"
+        assert diag["st_secrets_available"] is True
+        assert "GEMINI_API_KEY" in diag["st_secrets_keys"]
+        assert "st.secrets['GEMINI_API_KEY']" in diag["source_detected"]
+        assert diag["key_detected"] is True
+        assert diag["key_length"] == len("AIzaSySecretDiagnosticKey12345")
+        assert diag["starts_with_aiza"] is True
+        assert diag["is_configured"] is True
+        assert "Valid" in diag["format_status"]
+
+        # Ensure raw key string is never leaked in diagnostic output
+        diag_str = str(diag)
+        assert "AIzaSySecretDiagnosticKey12345" not in diag_str
 
 
 # ==============================================================================

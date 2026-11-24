@@ -174,6 +174,25 @@ with st.sidebar:
                 """
             )
 
+    with st.expander("🔍 Safe Configuration Diagnostics", expanded=False):
+        diag = st.session_state.gemini_service.get_diagnostic_info()
+        st.markdown(f"**App Version:** `{diag['git_commit']}`")
+        st.markdown(f"**Secrets Accessible:** {'✅ Yes' if diag['st_secrets_available'] else '❌ No'}")
+        if diag.get("st_secrets_keys"):
+            st.markdown(f"**Secrets Keys Detected:** `{', '.join(diag['st_secrets_keys'])}`")
+        if diag.get("st_secrets_error"):
+            st.caption(f"⚠️ Secrets Notice: {diag['st_secrets_error']}")
+        st.markdown(f"**Config Source Detected:** `{diag['source_detected']}`")
+        st.markdown(f"**Key Present:** {'✅ Yes' if diag['key_detected'] else '❌ No'}")
+        if diag['key_detected']:
+            st.markdown(f"**Key Length:** {diag['key_length']} characters")
+            st.markdown(f"**Starts with 'AIza':** {'✅ Yes' if diag['starts_with_aiza'] else 'ℹ️ No (Non-AIza prefix)'}")
+        st.markdown(f"**Format Status:** `{diag['format_status']}`")
+        st.markdown(f"**Format Validation (`is_configured`):** {'✅ Passed' if diag['is_configured'] else '❌ Failed'}")
+        st.markdown(f"**Gemini Client Initialized:** {'✅ Yes' if diag['client_initialized'] else '❌ No'}")
+        if diag.get("client_error"):
+            st.caption(f"⚠️ Client Notice: {diag['client_error']}")
+
     st.divider()
 
     # Database Quick Stats
@@ -187,13 +206,13 @@ with st.sidebar:
     col_sync, col_clear = st.columns([1, 1])
     with col_sync:
         if st.button("🔄 Sync Secrets", width="stretch", help="Reload API key from secrets or environment"):
-            reloaded_key = load_gemini_api_key()
+            reloaded_key = load_gemini_api_key(force_refresh=True)
             st.session_state.gemini_api_key = reloaded_key
             st.session_state.gemini_service.set_api_key(reloaded_key)
             if st.session_state.gemini_service.is_configured():
-                st.success("Secrets synced!")
+                st.success("Secrets successfully synchronized and verified!")
             else:
-                st.warning("No API key detected in secrets.")
+                st.warning("No valid API key detected. If you just added secrets, please wait a moment or reboot the app in Streamlit Cloud Settings.")
             st.rerun()
 
     with col_clear:
@@ -201,7 +220,7 @@ with st.sidebar:
             st.session_state.active_resume_data = None
             st.session_state.active_resume_text = ""
             st.session_state.active_resume_id = None
-            reloaded_key = load_gemini_api_key()
+            reloaded_key = load_gemini_api_key(force_refresh=True)
             st.session_state.gemini_api_key = reloaded_key
             st.session_state.gemini_service.set_api_key(reloaded_key)
             st.rerun()
