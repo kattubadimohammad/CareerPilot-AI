@@ -45,3 +45,31 @@ def test_gemini_auth_error_key_scrubbing():
     ok, msg = svc.test_connection()
     assert ok is False
     assert "AIzaSy" not in msg
+
+
+def test_deployment_config_security():
+    """Verify production and cloud configuration security parameters."""
+    import tomllib
+    from pathlib import Path
+
+    config_path = Path(__file__).resolve().parent.parent / ".streamlit" / "config.toml"
+    assert config_path.exists(), "config.toml must exist"
+
+    with open(config_path, "rb") as f:
+        cfg = tomllib.load(f)
+
+    # Server security assertions
+    server_cfg = cfg.get("server", {})
+    assert server_cfg.get("enableCORS") is True, "CORS protection must be enabled"
+    assert server_cfg.get("enableXsrfProtection") is True, "XSRF protection must be enabled"
+    assert server_cfg.get("headless") is True, "Headless must be enabled for cloud/Docker"
+    assert server_cfg.get("maxUploadSize") == 10, "Upload size must be capped at 10MB"
+
+    # Cloud compatibility assertions: no hardcoded local-only address or restrictions
+    assert "address" not in server_cfg or server_cfg.get("address") != "localhost", (
+        "server.address must not be hardcoded to localhost"
+    )
+    assert "allowedHosts" not in server_cfg or len(server_cfg.get("allowedHosts", [])) == 0, (
+        "server.allowedHosts must not hardcode local-only hosts for cloud compatibility"
+    )
+
