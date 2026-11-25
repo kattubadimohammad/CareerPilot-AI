@@ -183,3 +183,29 @@ def test_api_key_not_exposed_in_diagnostics_or_markup(monkeypatch):
     assert "Connection not verified" in md_texts
     assert secret_key not in md_texts
 
+
+
+def test_gemini_configuration_diagnostics_do_not_expose_key(monkeypatch):
+    """Show safe source/format diagnostics for an invalid key without revealing it."""
+    import streamlit as st
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+
+    secret_value = "not-a-real-gemini-key"
+    monkeypatch.setattr(st, "secrets", {})
+    monkeypatch.setenv("GEMINI_API_KEY", secret_value)
+
+    app_path = str(Path(__file__).resolve().parent.parent / "app.py")
+    at = AppTest.from_file(app_path)
+    at.run(timeout=10)
+
+    rendered = " ".join(
+        [item.value for item in at.markdown]
+        + [item.value for item in at.caption]
+        + [item.value for item in at.text]
+    )
+    assert "Gemini configuration diagnostics" in rendered
+    assert "Secret detected: Yes" in rendered
+    assert "Detected source: environment:GEMINI_API_KEY" in rendered
+    assert "Format check: Missing or invalid format" in rendered
+    assert secret_value not in rendered
