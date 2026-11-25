@@ -11,6 +11,7 @@ from src.gemini_service import (
     PREFERRED_MODELS,
     GeminiService,
     load_gemini_api_key,
+    load_gemini_api_key_with_source,
 )
 
 
@@ -241,6 +242,24 @@ def test_load_gemini_api_key_never_selects_unrelated_credentials():
     with patch("streamlit.secrets", unrelated_secrets, create=True):
         with patch.dict(os.environ, {}, clear=True):
             assert load_gemini_api_key() == ""
+
+
+def test_load_gemini_api_key_reports_exact_nested_source():
+    nested = {"google": {"api_key": "AIzaSyNestedSourceKey123456789"}}
+    with patch("streamlit.secrets", nested, create=True):
+        key, source = load_gemini_api_key_with_source()
+    assert key == "AIzaSyNestedSourceKey123456789"
+    assert source == "st.secrets['google']['api_key']"
+
+
+def test_diagnostic_reports_exact_nested_secret_source():
+    nested = {"gemini": {"api_key": "AIzaSyNestedDiagnosticKey123456"}}
+    with patch("streamlit.secrets", nested, create=True):
+        service = GeminiService(api_key="AIzaSyNestedDiagnosticKey123456")
+        diag = service.get_diagnostic_info()
+    assert diag["source_detected"] == "st.secrets['gemini']['api_key']"
+    assert diag["key_status"] == "format_valid_unverified"
+    assert diag["format_status"] == "Format accepted; connection not verified"
 
 
 def test_gemini_diagnostic_info_structure():
