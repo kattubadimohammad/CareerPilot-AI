@@ -477,7 +477,8 @@ elif nav_selection == "📄 Resume Intelligence":
                     st.markdown(f"- {s}")
 
             with col_weak:
-                st.markdown("#### ⚠️ Areas for Improvement")                for w in data.get("weaknesses", []):
+                st.markdown("#### ⚠️ Areas for Improvement")
+                for w in data.get("weaknesses", []):
                     st.markdown(f"- {w}")
 
             st.markdown("#### 🎯 Actionable Recommendations")
