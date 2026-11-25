@@ -25,6 +25,10 @@ def test_resume_intelligence_navigation_and_ready_state():
     assert "Upload Resume" in at.file_uploader[0].label
     assert at.session_state.active_resume_data is None
 
+    # Verify no API key text input is displayed in sidebar or page
+    for ti in at.text_input:
+        assert "api key" not in ti.label.lower()
+
     # Verify guidance message is displayed when no resume is loaded
     info_texts = [i.value for i in at.info]
     assert any("Ready to analyze" in t for t in info_texts)

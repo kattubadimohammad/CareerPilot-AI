@@ -21,14 +21,33 @@ class GeminiService:
     """Manages Gemini API client communication and deterministic fallbacks."""
 
     def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "").strip()
+        key = (api_key or "").strip()
+        if not key:
+            # Check Streamlit Secrets if running inside Streamlit Cloud
+            try:
+                import streamlit as st
+                if hasattr(st, "secrets"):
+                    if "GEMINI_API_KEY" in st.secrets:
+                        val = st.secrets["GEMINI_API_KEY"]
+                        if val and isinstance(val, str) and val.strip():
+                            key = val.strip()
+                    elif "general" in st.secrets and isinstance(st.secrets["general"], dict):
+                        val = st.secrets["general"].get("GEMINI_API_KEY")
+                        if val and isinstance(val, str) and val.strip():
+                            key = val.strip()
+            except Exception:
+                pass
+        if not key:
+            key = os.environ.get("GEMINI_API_KEY", "").strip()
+
+        self.api_key = key
         self.model_name = model_name or os.environ.get("GEMINI_MODEL", "").strip() or PREFERRED_MODELS[0]
         self._client = None
         if self.api_key:
             self._init_client()
 
     def set_api_key(self, api_key: str) -> None:
-        """Update API key at runtime (e.g. via Streamlit UI sidebar)."""
+        """Update API key at runtime."""
         self.api_key = api_key.strip()
         self._init_client()
 

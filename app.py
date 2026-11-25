@@ -43,11 +43,44 @@ def get_database():
 
 db = get_database()
 
-if "gemini_api_key" not in st.session_state:
-    st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+def get_gemini_api_key() -> tuple[str, str]:
+    """Retrieve Gemini API key securely with fallback order:
+    1. Streamlit Secrets (st.secrets["GEMINI_API_KEY"]) for Streamlit Community Cloud
+    2. Environment Variable (os.environ.get("GEMINI_API_KEY")) for Docker / Local dev
+    Returns:
+        (api_key, key_source) where key_source is 'secrets', 'env', or 'none'.
+    """
+    # 1. Try Streamlit Secrets (Streamlit Community Cloud)
+    try:
+        if hasattr(st, "secrets"):
+            if "GEMINI_API_KEY" in st.secrets:
+                val = st.secrets["GEMINI_API_KEY"]
+                if val and isinstance(val, str) and val.strip():
+                    return val.strip(), "secrets"
+            elif "general" in st.secrets and isinstance(st.secrets["general"], dict):
+                val = st.secrets["general"].get("GEMINI_API_KEY")
+                if val and isinstance(val, str) and val.strip():
+                    return val.strip(), "secrets"
+    except Exception:
+        pass
+
+    # 2. Try Environment Variable (Docker / Local dev)
+    env_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if env_key:
+        return env_key, "env"
+
+    return "", "none"
+
+
+# Load key securely on every run/rerun to reflect secrets or env changes
+current_api_key, current_key_source = get_gemini_api_key()
+st.session_state.gemini_api_key = current_api_key
+st.session_state.gemini_key_source = current_key_source
 
 if "gemini_service" not in st.session_state:
     st.session_state.gemini_service = GeminiService(api_key=st.session_state.gemini_api_key)
+elif st.session_state.gemini_service.api_key != st.session_state.gemini_api_key:
+    st.session_state.gemini_service.set_api_key(st.session_state.gemini_api_key)
 
 if "active_resume_data" not in st.session_state:
     st.session_state.active_resume_data = None
@@ -98,43 +131,45 @@ with st.sidebar:
 
     st.divider()
 
-    # Gemini API Configuration
+    # Gemini AI Service Settings & Diagnostics (Key loaded securely via Secrets/Env)
     st.markdown("### 🔑 AI Service Settings")
-    input_key = st.text_input(
-        "Gemini API Key",
-        value=st.session_state.gemini_api_key,
-        type="password",
-        help="Input your Gemini API Key. If left blank, CareerPilot operates seamlessly with its deterministic rule-based intelligence engine.",
-    )
 
-    if input_key != st.session_state.gemini_api_key:
-        st.session_state.gemini_api_key = input_key
-        st.session_state.gemini_service.set_api_key(input_key)
-        st.success("API key updated!")
+    is_configured = st.session_state.gemini_service.is_configured()
+    key_source = st.session_state.get("gemini_key_source", "none")
+
+    # Safe Status Badge without exposing secret values
+    if is_configured:
+        source_label = "Streamlit Secrets" if key_source == "secrets" else "Environment"
+        st.markdown(
+            f"<div style='background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px;'>"
+            f"<span style='color: #065F46; font-weight: 600; font-size: 0.85rem;'>● AI Key Active ({source_label})</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div style='background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px;'>"
+            "<span style='color: #475569; font-weight: 600; font-size: 0.85rem;'>○ Fallback Mode (Deterministic)</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
     # Model Selection: Primary gemini-3.5-flash, Fallback gemini-3.5-flash-lite
     selected_model = st.selectbox(
         "Gemini Model",
         ["gemini-3.5-flash", "gemini-3.5-flash-lite"],
         index=0,
+        help="Primary model is gemini-3.5-flash with automatic failover to gemini-3.5-flash-lite.",
     )
     st.session_state.gemini_service.model_name = selected_model
 
-    col_btn, col_badge = st.columns([1, 1])
-    with col_btn:
-        if st.button("Test API", width="stretch"):
-            with st.spinner("Testing..."):
-                ok, msg = st.session_state.gemini_service.test_connection()
-                if ok:
-                    st.success(msg)
-                else:
-                    st.error(msg)
-
-    with col_badge:
-        if st.session_state.gemini_service.is_configured():
-            st.markdown("<span style='color: #16A34A; font-weight:600;'>● AI Key Active</span>", unsafe_allow_html=True)
-        else:
-            st.markdown("<span style='color: #64748B; font-weight:600;'>○ Fallback Mode</span>", unsafe_allow_html=True)
+    if st.button("Test API Connection", width="stretch"):
+        with st.spinner("Testing connection..."):
+            ok, msg = st.session_state.gemini_service.test_connection()
+            if ok:
+                st.success(msg)
+            else:
+                st.error(msg)
 
     st.divider()
 
