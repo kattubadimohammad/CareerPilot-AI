@@ -85,7 +85,7 @@ def test_secure_key_loading_from_streamlit_secrets(monkeypatch):
 
     key, source = get_gemini_api_key()
     assert key == "AIzaSyCloudSecretsKeyTest12345"
-    assert source == "secrets"
+    assert source == "st.secrets['GEMINI_API_KEY']"
 
     # Also confirm GeminiService picks up st.secrets when no key passed
     svc = GeminiService()
@@ -103,7 +103,7 @@ def test_secure_key_loading_from_nested_streamlit_secrets(monkeypatch):
 
     key, source = get_gemini_api_key()
     assert key == "AIzaSyNestedSecretsKey67890"
-    assert source == "secrets"
+    assert source == "st.secrets['general']['GEMINI_API_KEY']"
 
 
 def test_secure_key_loading_environment_fallback(monkeypatch):
@@ -116,7 +116,7 @@ def test_secure_key_loading_environment_fallback(monkeypatch):
 
     key, source = get_gemini_api_key()
     assert key == "AIzaSyEnvFallbackKey98765"
-    assert source == "env"
+    assert source == "environment:GEMINI_API_KEY"
 
     svc = GeminiService()
     assert svc.api_key == "AIzaSyEnvFallbackKey98765"
@@ -179,6 +179,7 @@ def test_api_key_not_exposed_in_diagnostics_or_markup(monkeypatch):
 
     # Verify safe status badge displays active status without leaking key
     md_texts = " ".join([m.value for m in at.markdown])
-    assert "AI Key Active" in md_texts
+    assert "Key format accepted (Environment)" in md_texts
+    assert "Connection not verified" in md_texts
     assert secret_key not in md_texts
 
