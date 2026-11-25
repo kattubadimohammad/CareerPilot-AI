@@ -115,7 +115,7 @@ with st.sidebar:
     # Format validation is not proof of a successful API connection.
     # Safe status badge without exposing secret values.
     if is_configured:
-        source_label = "Streamlit Secrets" if key_source == "secrets" else "Environment"
+        source_label = "Streamlit Secrets" if key_source.startswith("st.secrets[") else "Environment"
         st.markdown(
             f"<div style='background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px;'>"
             f"<span style='color: #065F46; font-weight: 600; font-size: 0.85rem;'>● Key format accepted ({source_label})</span>"
