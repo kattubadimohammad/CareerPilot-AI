@@ -15,6 +15,8 @@ PREFERRED_MODELS = [DEFAULT_MODEL, "gemini-3.5-flash-lite"]
 DEFAULT_UNVERIFIED_MODELS = PREFERRED_MODELS.copy()
 AVAILABLE_MODELS = DEFAULT_UNVERIFIED_MODELS.copy()
 _KEY_PATTERN = re.compile(r"AIza[0-9A-Za-z_+\-/=]{20,}")
+# A shape check only; Google remains the authority on whether a key is valid.
+_KEY_FORMAT_PATTERN = re.compile(r"^AIza[0-9A-Za-z_+\-/=]{21,}$")
 
 
 def _scrub_sensitive_string(value: Any) -> str:
@@ -103,7 +105,7 @@ class GeminiService:
         key = self.sanitize_key(self.api_key)
         lowered = key.lower()
         return bool(
-            key.startswith("AIza")
+            _KEY_FORMAT_PATTERN.fullmatch(key) is not None
             and len(key) >= 25
             and not any(marker in lowered for marker in ("placeholder", "dummy", "your_gemini"))
             and not any(ch.isspace() for ch in key)
