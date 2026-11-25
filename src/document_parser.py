@@ -31,23 +31,28 @@ class DocumentParser:
     @staticmethod
     def validate_file(file_bytes: bytes, filename: str) -> str:
         """Validate file size, extension, and magic byte signatures. Returns normalized extension."""
-        if not file_bytes:
-            raise DocumentValidationError("The uploaded file is empty.")
+        if file_bytes is None or len(file_bytes) == 0:
+            raise DocumentValidationError("The uploaded file is empty (0 bytes). Please upload a valid document.")
 
         if len(file_bytes) > MAX_FILE_SIZE_BYTES:
             raise DocumentValidationError("File size exceeds maximum allowed limit (10MB).")
 
         clean_filename = Path(filename).name.replace("\x00", "")
         ext = Path(clean_filename).suffix.lower().lstrip(".")
+        if not ext:
+            raise DocumentValidationError("The file has no extension. Please upload a .pdf or .docx file.")
+
         if ext not in ["pdf", "docx"]:
-            raise DocumentValidationError(f"Unsupported file format: .{ext}. Only PDF and DOCX are supported.")
+            raise DocumentValidationError(f"Unsupported file format: .{ext}. Only PDF (.pdf) and Word (.docx) are supported.")
 
         # Magic byte signature checks
         if ext == "pdf":
-            if not file_bytes.startswith(PDF_MAGIC_BYTES):
+            # Per ISO 32000-1 (PDF specification), %PDF- header may be preceded by UTF-8 BOM or header comment in first 1024 bytes
+            if PDF_MAGIC_BYTES not in file_bytes[:1024]:
                 raise DocumentValidationError("Invalid PDF: File does not contain standard PDF header signature (%PDF-).")
         elif ext == "docx":
-            if not file_bytes.startswith(DOCX_MAGIC_BYTES):
+            # Word DOCX is an OpenXML ZIP archive starting with PK signature
+            if not file_bytes.startswith(b"PK"):
                 raise DocumentValidationError("Invalid DOCX: File does not contain standard ZIP/DOCX header signature (PK).")
 
         return ext
@@ -70,7 +75,7 @@ class DocumentParser:
             doc.close()
             full_text = "\n".join(extracted_text).strip()
             if not full_text:
-                raise DocumentValidationError("Could not extract any readable text from the PDF. It may be scanned or image-only.")
+                raise DocumentValidationError("Could not extract readable text from this PDF. It appears to be scanned or image-based. Please use a text-based PDF or DOCX file.")
 
             return DocumentParser.clean_text(full_text)
         except Exception as e:

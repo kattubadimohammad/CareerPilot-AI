@@ -11,11 +11,7 @@ import streamlit as st
 
 from src.database import Database
 from src.document_parser import DocumentParser, DocumentValidationError
-from src.gemini_service import (
-    GeminiService,
-    load_gemini_api_key,
-    DEFAULT_MODEL,
-)
+from src.gemini_service import GeminiService
 from src.resume_analyzer import ResumeAnalyzer
 from src.job_matcher import JobMatcher
 from src.interview_coach import InterviewCoach
@@ -47,24 +43,11 @@ def get_database():
 
 db = get_database()
 
-# API Key and Gemini Service Initialization with Secrets Auto-Sync
-current_gemini_key = load_gemini_api_key()
+if "gemini_api_key" not in st.session_state:
+    st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
 
 if "gemini_service" not in st.session_state:
-    st.session_state.gemini_api_key = current_gemini_key
-    st.session_state.gemini_service = GeminiService(
-        api_key=current_gemini_key,
-        model_name=DEFAULT_MODEL,
-    )
-else:
-    # If session state was initialized before secrets were configured or key changed,
-    # automatically synchronize without requiring session reset
-    if current_gemini_key and (
-        not st.session_state.gemini_service.is_configured()
-        or st.session_state.gemini_service.api_key != current_gemini_key
-    ):
-        st.session_state.gemini_api_key = current_gemini_key
-        st.session_state.gemini_service.set_api_key(current_gemini_key)
+    st.session_state.gemini_service = GeminiService(api_key=st.session_state.gemini_api_key)
 
 if "active_resume_data" not in st.session_state:
     st.session_state.active_resume_data = None
@@ -74,6 +57,9 @@ if "active_resume_text" not in st.session_state:
 
 if "active_resume_id" not in st.session_state:
     st.session_state.active_resume_id = None
+
+if "last_analyzed_file_sig" not in st.session_state:
+    st.session_state.last_analyzed_file_sig = None
 
 
 # Helper to load sample files
@@ -114,35 +100,25 @@ with st.sidebar:
 
     # Gemini API Configuration
     st.markdown("### 🔑 AI Service Settings")
-    # Never render the server-side API key in the public app UI.
-    # Configure GEMINI_API_KEY through Streamlit Community Cloud Secrets
-    # or a local environment variable instead.
-    if st.session_state.gemini_service.is_configured():
-        st.caption("Gemini API key is securely loaded from server configuration.")
-    else:
-        st.caption("Gemini API key is not configured. Using deterministic fallback mode.")
+    input_key = st.text_input(
+        "Gemini API Key",
+        value=st.session_state.gemini_api_key,
+        type="password",
+        help="Input your Gemini API Key. If left blank, CareerPilot operates seamlessly with its deterministic rule-based intelligence engine.",
+    )
 
-    # Model Selection (verified via Google GenAI SDK where possible)
-    models_list, is_live_verified = st.session_state.gemini_service.get_available_models()
-    current_model = st.session_state.gemini_service.model_name
-    if current_model not in models_list:
-        current_model = DEFAULT_MODEL
-        st.session_state.gemini_service.model_name = current_model
+    if input_key != st.session_state.gemini_api_key:
+        st.session_state.gemini_api_key = input_key
+        st.session_state.gemini_service.set_api_key(input_key)
+        st.success("API key updated!")
 
-    model_idx = models_list.index(current_model) if current_model in models_list else 0
+    # Model Selection: Primary gemini-3.5-flash, Fallback gemini-3.5-flash-lite
     selected_model = st.selectbox(
         "Gemini Model",
-        models_list,
-        index=model_idx,
-        help="Select Gemini model. 'gemini-3.8-flash' is the primary model with automatic failover to 'gemini-3.5-flash-lite'.",
+        ["gemini-3.5-flash", "gemini-3.5-flash-lite"],
+        index=0,
     )
-    if selected_model != st.session_state.gemini_service.model_name:
-        st.session_state.gemini_service.model_name = selected_model
-
-    if is_live_verified:
-        st.caption("✅ Live model access confirmed for project.")
-    elif st.session_state.gemini_service.is_configured():
-        st.caption("ℹ️ Unverified default models shown (click 'Test API' to verify).")
+    st.session_state.gemini_service.model_name = selected_model
 
     col_btn, col_badge = st.columns([1, 1])
     with col_btn:
@@ -160,39 +136,6 @@ with st.sidebar:
         else:
             st.markdown("<span style='color: #64748B; font-weight:600;'>○ Fallback Mode</span>", unsafe_allow_html=True)
 
-    if not st.session_state.gemini_service.is_configured():
-        with st.expander("ℹ️ Secrets Setup Guide", expanded=False):
-            st.markdown(
-                """
-                **Streamlit Community Cloud:**
-                1. Go to **App Settings** > **Secrets**.
-                2. Add your key:
-                ```toml
-                GEMINI_API_KEY = "AIzaSy..."
-                ```
-                3. Click **Save** then **🔄 Sync Secrets** below.
-                """
-            )
-
-    with st.expander("🔍 Safe Configuration Diagnostics", expanded=False):
-        diag = st.session_state.gemini_service.get_diagnostic_info()
-        st.markdown(f"**App Version:** `{diag['git_commit']}`")
-        st.markdown(f"**Secrets Accessible:** {'✅ Yes' if diag['st_secrets_available'] else '❌ No'}")
-        if diag.get("st_secrets_keys"):
-            st.markdown(f"**Secrets Keys Detected:** `{', '.join(diag['st_secrets_keys'])}`")
-        if diag.get("st_secrets_error"):
-            st.caption(f"⚠️ Secrets Notice: {diag['st_secrets_error']}")
-        st.markdown(f"**Config Source Detected:** `{diag['source_detected']}`")
-        st.markdown(f"**Key Present:** {'✅ Yes' if diag['key_detected'] else '❌ No'}")
-        if diag['key_detected']:
-            st.markdown(f"**Key Length:** {diag['key_length']} characters")
-            st.markdown(f"**Starts with 'AIza':** {'✅ Yes' if diag['starts_with_aiza'] else 'ℹ️ No (Non-AIza prefix)'}")
-        st.markdown(f"**Format Status:** `{diag['format_status']}`")
-        st.markdown(f"**Format Validation (`is_configured`):** {'✅ Passed' if diag['is_configured'] else '❌ Failed'}")
-        st.markdown(f"**Gemini Client Initialized:** {'✅ Yes' if diag['client_initialized'] else '❌ No'}")
-        if diag.get("client_error"):
-            st.caption(f"⚠️ Client Notice: {diag['client_error']}")
-
     st.divider()
 
     # Database Quick Stats
@@ -203,27 +146,12 @@ with st.sidebar:
     st.write(f"- **Interview Runs:** {stats['interviews_count']}")
     st.write(f"- **Roadmaps:** {stats['roadmaps_count']}")
 
-    col_sync, col_clear = st.columns([1, 1])
-    with col_sync:
-        if st.button("🔄 Sync Secrets", width="stretch", help="Reload API key from secrets or environment"):
-            reloaded_key = load_gemini_api_key(force_refresh=True)
-            st.session_state.gemini_api_key = reloaded_key
-            st.session_state.gemini_service.set_api_key(reloaded_key)
-            if st.session_state.gemini_service.is_configured():
-                st.success("Secrets successfully synchronized and verified!")
-            else:
-                st.warning("No valid API key detected. If you just added secrets, please wait a moment or reboot the app in Streamlit Cloud Settings.")
-            st.rerun()
-
-    with col_clear:
-        if st.button("🗑️ Clear Session", width="stretch", help="Reset active resume data and reload secrets"):
-            st.session_state.active_resume_data = None
-            st.session_state.active_resume_text = ""
-            st.session_state.active_resume_id = None
-            reloaded_key = load_gemini_api_key(force_refresh=True)
-            st.session_state.gemini_api_key = reloaded_key
-            st.session_state.gemini_service.set_api_key(reloaded_key)
-            st.rerun()
+    if st.button("🗑️ Clear Active Session", width="stretch"):
+        st.session_state.active_resume_data = None
+        st.session_state.active_resume_text = ""
+        st.session_state.active_resume_id = None
+        st.session_state.last_analyzed_file_sig = None
+        st.rerun()
 
 
 # ==============================================================================
@@ -329,6 +257,7 @@ if nav_selection == "📊 Executive Dashboard":
                     st.session_state.active_resume_data = parsed
                     st.session_state.active_resume_text = text
                     st.session_state.active_resume_id = res_id
+                    st.session_state.last_analyzed_file_sig = "sample_resume.pdf"
                     st.success("Loaded demonstration resume into active session!")
                     st.rerun()
 
@@ -351,6 +280,7 @@ if nav_selection == "📊 Executive Dashboard":
                     st.session_state.active_resume_data = None
                     st.session_state.active_resume_text = ""
                     st.session_state.active_resume_id = None
+                    st.session_state.last_analyzed_file_sig = None
                 st.success(f"Permanently purged Resume #{selected_del_id} and all associated records: {deleted_counts['matches_deleted']} job matches, {deleted_counts['interviews_deleted']} interviews, {deleted_counts['roadmaps_deleted']} roadmaps.")
                 st.rerun()
     else:
@@ -371,6 +301,7 @@ elif nav_selection == "📄 Resume Intelligence":
             "Upload Resume (PDF or DOCX)",
             type=["pdf", "docx"],
             help="Supported formats: .pdf, .docx. Maximum file size: 10MB.",
+            key="resume_file_uploader",
         )
 
     with col_demo:
@@ -382,8 +313,8 @@ elif nav_selection == "📄 Resume Intelligence":
     filename = ""
 
     if uploaded_file is not None:
-        file_bytes = uploaded_file.read()
         filename = uploaded_file.name
+        file_bytes = uploaded_file.getvalue()
     elif load_demo_pdf:
         file_bytes = load_sample_file("sample_resume.pdf")
         filename = "sample_resume.pdf"
@@ -391,31 +322,58 @@ elif nav_selection == "📄 Resume Intelligence":
         file_bytes = load_sample_file("sample_resume.docx")
         filename = "sample_resume.docx"
 
-    if file_bytes and filename:
-        try:
-            with st.spinner("Extracting and parsing document text..."):
-                raw_text, file_type = DocumentParser.extract_text(file_bytes, filename)
-                analyzer = ResumeAnalyzer(st.session_state.gemini_service)
-                analysis_result = analyzer.analyze_resume(raw_text, filename)
+    # Handle Upload & Analysis Workflow
+    if uploaded_file is not None and len(file_bytes) == 0:
+        st.error("⚠️ The uploaded file is empty (0 bytes). Please select a valid PDF or DOCX resume.")
+    elif file_bytes and filename:
+        import hashlib
+        file_sig = hashlib.sha256(file_bytes).hexdigest()[:16]
+        is_new_file = st.session_state.get("last_analyzed_file_sig") != file_sig
 
-                # Persist to SQLite
-                res_id = db.save_resume(
-                    filename=filename,
-                    file_type=file_type,
-                    raw_text=raw_text,
-                    candidate_name=analysis_result.get("candidate_name", "Candidate"),
-                    parsed_data=analysis_result,
-                )
+        # File status bar and manual Re-analyze trigger
+        col_status, col_action = st.columns([3, 1])
+        with col_status:
+            file_kb = len(file_bytes) / 1024
+            st.caption(f"📁 Document: **{html.escape(filename)}** ({file_kb:.1f} KB)")
+        with col_action:
+            if not is_new_file and st.session_state.active_resume_data:
+                if st.button("🔄 Re-analyze Resume", width="stretch"):
+                    is_new_file = True
 
-                st.session_state.active_resume_data = analysis_result
-                st.session_state.active_resume_text = raw_text
-                st.session_state.active_resume_id = res_id
-                st.success(f"Successfully parsed and saved: **{filename}** (ID #{res_id})")
+        if is_new_file:
+            try:
+                with st.status(f"Processing {filename}...", expanded=True) as status_box:
+                    status_box.write("📄 Step 1/4: Validating file integrity and magic bytes...")
+                    raw_text, file_type = DocumentParser.extract_text(file_bytes, filename)
 
-        except DocumentValidationError as dve:
-            st.error(f"Validation Error: {str(dve)}")
-        except Exception as e:
-            st.error(f"Unexpected parsing error: {str(e)}")
+                    status_box.write("🔍 Step 2/4: Extracting structured skills, education, and career experience...")
+                    analyzer = ResumeAnalyzer(st.session_state.gemini_service)
+                    analysis_result = analyzer.analyze_resume(raw_text, filename)
+
+                    status_box.write("💾 Step 3/4: Storing candidate record in database...")
+                    res_id = db.save_resume(
+                        filename=filename,
+                        file_type=file_type,
+                        raw_text=raw_text,
+                        candidate_name=analysis_result.get("candidate_name", "Candidate"),
+                        parsed_data=analysis_result,
+                    )
+
+                    st.session_state.active_resume_data = analysis_result
+                    st.session_state.active_resume_text = raw_text
+                    st.session_state.active_resume_id = res_id
+                    st.session_state.last_analyzed_file_sig = file_sig
+
+                    status_box.write("✨ Step 4/4: Finalizing resume score and intelligence...")
+                    status_box.update(label=f"✅ Analysis Complete: {filename} (ID #{res_id})", state="complete", expanded=False)
+
+                st.success(f"Successfully parsed and analyzed: **{filename}** (ID #{res_id})")
+                st.rerun()
+
+            except DocumentValidationError as dve:
+                st.error(f"❌ Document Validation Error: {str(dve)}")
+            except Exception as e:
+                st.error(f"❌ Unexpected Error During Analysis: {str(e)}")
 
     # Display Active Resume Analysis
     if st.session_state.active_resume_data:
@@ -505,6 +463,9 @@ elif nav_selection == "📄 Resume Intelligence":
 
         with tab_raw:
             st.text_area("Full Document Text", st.session_state.active_resume_text, height=300)
+    else:
+        st.divider()
+        st.info("💡 **Ready to analyze**: Upload your resume in PDF or DOCX format above (or load a sample profile) to view instant AI & deterministic skill extraction, scoring, and actionable feedback.")
 
 
 # ==============================================================================

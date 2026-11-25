@@ -299,7 +299,12 @@ Return ONLY a valid JSON object with EXACTLY this structure:
 
         # Deterministic return
         deterministic_data["is_ai_generated"] = False
-        deterministic_data["provider_note"] = (
-            "Deterministic Rule-Based Intelligence (Gemini API key not configured. Enable in sidebar for AI semantic review.)"
-        )
+        if self.gemini_service and self.gemini_service.is_configured():
+            deterministic_data["provider_note"] = (
+                "Deterministic Rule-Based Intelligence (Gemini API request failed or quota exceeded. Showing reliable rule-based analysis.)"
+            )
+        else:
+            deterministic_data["provider_note"] = (
+                "Deterministic Rule-Based Intelligence (Gemini API key not configured. Enable in sidebar for AI semantic review.)"
+            )
         return deterministic_data

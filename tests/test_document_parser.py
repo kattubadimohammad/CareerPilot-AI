@@ -71,6 +71,19 @@ def test_magic_byte_validation():
     with pytest.raises(DocumentValidationError, match="standard ZIP/DOCX header signature"):
         DocumentParser.validate_file(b"TextContentNotZip", "malicious.docx")
 
+    # Valid PDF with UTF-8 BOM before %PDF- (common in mobile exports)
+    bom_pdf = b"\xef\xbb\xbf%PDF-1.5 test document"
+    assert DocumentParser.validate_file(bom_pdf, "mobile_resume.pdf") == "pdf"
+
+    # Case-insensitive extensions
+    assert DocumentParser.validate_file(b"%PDF-1.4", "resume.PDF") == "pdf"
+    assert DocumentParser.validate_file(b"PK\x03\x04", "resume.DOCX") == "docx"
+
+    # Missing extension
+    with pytest.raises(DocumentValidationError, match="no extension"):
+        DocumentParser.validate_file(b"%PDF-1.4", "resume_without_extension")
+
+
 
 def test_invalid_docx_structure_rejection():
     # Valid zip but not a docx (missing word/document.xml)
