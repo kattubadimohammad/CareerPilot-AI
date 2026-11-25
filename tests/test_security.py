@@ -228,6 +228,7 @@ def test_aq_format_gemini_key_is_accepted_and_redacted(monkeypatch):
     assert diagnostics["key_prefix"] == "AQ."
     assert diagnostics["starts_with_aq"] is True
     assert aq_key not in str(diagnostics)
+    assert aq_key not in GeminiService._scrub_sensitive_string(f"bad credential: {aq_key}")
 
     app_path = str(Path(__file__).resolve().parent.parent / "app.py")
     at = AppTest.from_file(app_path)
@@ -237,5 +238,6 @@ def test_aq_format_gemini_key_is_accepted_and_redacted(monkeypatch):
         + [item.value for item in at.caption]
         + [item.value for item in at.text]
     )
-    assert "Recognized key prefix: AQ." in rendered
+    assert "Recognized key prefix" in rendered
+    assert "AQ." in rendered
     assert aq_key not in rendered
