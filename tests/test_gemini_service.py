@@ -276,7 +276,7 @@ def test_gemini_diagnostic_info_structure():
         assert diag["key_length"] == len("AIzaSySecretDiagnosticKey12345")
         assert diag["starts_with_aiza"] is True
         assert diag["is_configured"] is True
-        assert "Valid" in diag["format_status"]
+        assert diag["format_status"] == "Format accepted; connection not verified"
 
         # Ensure raw key string is never leaked in diagnostic output
         diag_str = str(diag)
