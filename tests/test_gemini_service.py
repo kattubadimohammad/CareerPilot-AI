@@ -11,6 +11,7 @@ from src.gemini_service import (
     PREFERRED_MODELS,
     GeminiService,
     load_gemini_api_key,
+    load_gemini_api_key_with_source,
 )
 
 
@@ -95,6 +96,9 @@ def test_gemini_is_configured_strict_format_validation():
         "AIzaSy_dummy_key_not_real_1234567890",  # Dummy substring
         "your_gemini_api_key_here",
         "key with spaces inside 12345678901234567890",
+        "AIzaSyInvalid@Character123456789012345",  # Unsupported punctuation
+        "AIzaSyInvalid:Character123456789012345",  # Unsupported punctuation
+        "AIzaSyInvalid\nCharacter123456789012345",  # Embedded newline
     ]
     for bad_key in bad_strings:
         svc = GeminiService(api_key=bad_key)
@@ -107,12 +111,12 @@ def test_gemini_is_configured_strict_format_validation():
 
 
 def test_gemini_primary_model_preference():
-    assert DEFAULT_MODEL == "gemini-3.8-flash"
-    assert PREFERRED_MODELS[0] == "gemini-3.8-flash"
+    assert DEFAULT_MODEL == "gemini-3.5-flash"
+    assert PREFERRED_MODELS[0] == "gemini-3.5-flash"
     assert PREFERRED_MODELS[1] == "gemini-3.5-flash-lite"
 
     service = GeminiService()
-    assert service.model_name == "gemini-3.8-flash"
+    assert service.model_name == "gemini-3.5-flash"
 
 
 def test_gemini_available_models_export():
@@ -126,7 +130,7 @@ def test_gemini_model_discovery_success():
     service = GeminiService(api_key="AIzaSyFakeKeyForTestingPurposes1234567")
     mock_client = MagicMock()
     mock_m1 = MagicMock()
-    mock_m1.name = "models/gemini-3.8-flash"
+    mock_m1.name = "models/gemini-3.5-flash"
     mock_m2 = MagicMock()
     mock_m2.name = "models/gemini-3.5-flash-lite"
     mock_m3 = MagicMock()
@@ -136,7 +140,7 @@ def test_gemini_model_discovery_success():
 
     models, is_live = service.get_available_models()
     assert is_live is True
-    assert "gemini-3.8-flash" in models
+    assert "gemini-3.5-flash" in models
     assert "gemini-3.5-flash-lite" in models
     assert "gemini-embedding-001" not in models  # Embeddings excluded from conversational selector
 
@@ -150,7 +154,7 @@ def test_gemini_model_discovery_failure_graceful_fallback():
     models, is_live = service.get_available_models()
     assert is_live is False
     assert models == DEFAULT_UNVERIFIED_MODELS
-    assert "gemini-3.8-flash" in models
+    assert "gemini-3.5-flash" in models
 
 
 def test_gemini_model_discovery_empty_list_fallback():
@@ -243,13 +247,31 @@ def test_load_gemini_api_key_never_selects_unrelated_credentials():
             assert load_gemini_api_key() == ""
 
 
+def test_load_gemini_api_key_reports_exact_nested_source():
+    nested = {"google": {"api_key": "AIzaSyNestedSourceKey123456789"}}
+    with patch("streamlit.secrets", nested, create=True):
+        key, source = load_gemini_api_key_with_source()
+    assert key == "AIzaSyNestedSourceKey123456789"
+    assert source == "st.secrets['google']['api_key']"
+
+
+def test_diagnostic_reports_exact_nested_secret_source():
+    nested = {"gemini": {"api_key": "AIzaSyNestedDiagnosticKey123456"}}
+    with patch("streamlit.secrets", nested, create=True):
+        service = GeminiService(api_key="AIzaSyNestedDiagnosticKey123456")
+        diag = service.get_diagnostic_info()
+    assert diag["source_detected"] == "st.secrets['gemini']['api_key']"
+    assert diag["key_status"] == "format_valid_unverified"
+    assert diag["format_status"] == "Format accepted; connection not verified"
+
+
 def test_gemini_diagnostic_info_structure():
     mock_secrets = {"GEMINI_API_KEY": "AIzaSySecretDiagnosticKey12345"}
     with patch("streamlit.secrets", mock_secrets, create=True):
         service = GeminiService(api_key="AIzaSySecretDiagnosticKey12345")
         diag = service.get_diagnostic_info()
 
-        assert diag["git_commit"] == "3e9a024"
+        assert "git_commit" in diag and diag["git_commit"]
         assert diag["st_secrets_available"] is True
         assert "GEMINI_API_KEY" in diag["st_secrets_keys"]
         assert "st.secrets['GEMINI_API_KEY']" in diag["source_detected"]
@@ -257,7 +279,7 @@ def test_gemini_diagnostic_info_structure():
         assert diag["key_length"] == len("AIzaSySecretDiagnosticKey12345")
         assert diag["starts_with_aiza"] is True
         assert diag["is_configured"] is True
-        assert "Valid" in diag["format_status"]
+        assert diag["format_status"] == "Format accepted; connection not verified"
 
         # Ensure raw key string is never leaked in diagnostic output
         diag_str = str(diag)
@@ -270,10 +292,10 @@ def test_gemini_diagnostic_info_structure():
 
 
 def test_test_connection_404_model_not_found():
-    service = GeminiService(api_key="AIzaSyTestKey123456789012345678901234", model_name="gemini-3.8-flash")
+    service = GeminiService(api_key="AIzaSyTestKey123456789012345678901234", model_name="gemini-3.5-flash")
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = Exception(
-        "404 Not Found: models/gemini-3.8-flash is not found for API version v1beta"
+        "404 Not Found: models/gemini-3.5-flash is not found for API version v1beta"
     )
     service._client = mock_client
 
@@ -285,7 +307,7 @@ def test_test_connection_404_model_not_found():
 
 
 def test_test_connection_503_high_demand():
-    service = GeminiService(api_key="AIzaSyTestKey123456789012345678901234", model_name="gemini-3.8-flash")
+    service = GeminiService(api_key="AIzaSyTestKey123456789012345678901234", model_name="gemini-3.5-flash")
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = Exception(
         "503 The model is overloaded. Please try again later."
@@ -345,10 +367,10 @@ def test_test_connection_403_permission_denied():
 
 
 def test_generate_json_response_model_failover_success():
-    service = GeminiService(api_key="AIzaSyTestKey123456789012345678901234", model_name="gemini-3.8-flash")
+    service = GeminiService(api_key="AIzaSyTestKey123456789012345678901234", model_name="gemini-3.5-flash")
     mock_client = MagicMock()
 
-    # First model (gemini-3.8-flash) throws 503 high demand
+    # First model (gemini-3.5-flash) throws 503 high demand
     # Second model (gemini-3.5-flash-lite) succeeds
     successful_resp = MagicMock()
     successful_resp.text = '{"analysis": "successful failover", "score": 95}'
@@ -366,7 +388,7 @@ def test_generate_json_response_model_failover_success():
     assert is_ai is True
     assert result["analysis"] == "successful failover"
     assert "gemini-3.5-flash-lite" in note
-    assert "failover from gemini-3.8-flash" in note
+    assert "failover from gemini-3.5-flash" in note
 
 
 def test_generate_json_response_all_fail_preserves_deterministic_fallback():
