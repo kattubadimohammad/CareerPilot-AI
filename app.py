@@ -137,7 +137,7 @@ with st.sidebar:
         st.write(f"**Secret detected:** {'Yes' if diagnostics['key_detected'] else 'No'}")
         st.write(f"**Detected source:** {diagnostics['source_detected']}")
         st.write(f"**Key length:** {diagnostics['key_length']} characters")
-        st.write(f"**Starts with AIza:** {'Yes' if diagnostics['starts_with_aiza'] else 'No'}")
+        st.write(f"**Recognized key prefix:** {diagnostics['key_prefix']}")
         st.write(f"**Format check:** {diagnostics['format_status']}")
         st.write(f"**Streamlit Secrets available:** {'Yes' if diagnostics['st_secrets_available'] else 'No'}")
         st.write(f"**Secret names visible to app:** {', '.join(diagnostics['st_secrets_keys']) or 'None'}")
