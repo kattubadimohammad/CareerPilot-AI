@@ -131,6 +131,18 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
 
+    # Safe diagnostics explain why Gemini is inactive without exposing credentials.
+    with st.expander("Gemini configuration diagnostics"):
+        diagnostics = st.session_state.gemini_service.get_diagnostic_info()
+        st.write(f"**Secret detected:** {'Yes' if diagnostics['key_detected'] else 'No'}")
+        st.write(f"**Detected source:** {diagnostics['source_detected']}")
+        st.write(f"**Key length:** {diagnostics['key_length']} characters")
+        st.write(f"**Starts with AIza:** {'Yes' if diagnostics['starts_with_aiza'] else 'No'}")
+        st.write(f"**Format check:** {diagnostics['format_status']}")
+        st.write(f"**Streamlit Secrets available:** {'Yes' if diagnostics['st_secrets_available'] else 'No'}")
+        st.write(f"**Secret names visible to app:** {', '.join(diagnostics['st_secrets_keys']) or 'None'}")
+        st.caption("For security, the API key value is never displayed.")
+
     # Model Selection: Primary gemini-3.5-flash, Fallback gemini-3.5-flash-lite
     selected_model = st.selectbox(
         "Gemini Model",
