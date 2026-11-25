@@ -11,7 +11,7 @@ import streamlit as st
 
 from src.database import Database
 from src.document_parser import DocumentParser, DocumentValidationError
-from src.gemini_service import GeminiService
+from src.gemini_service import GeminiService, load_gemini_api_key_with_source
 from src.resume_analyzer import ResumeAnalyzer
 from src.job_matcher import JobMatcher
 from src.interview_coach import InterviewCoach
@@ -44,33 +44,8 @@ def get_database():
 db = get_database()
 
 def get_gemini_api_key() -> tuple[str, str]:
-    """Retrieve Gemini API key securely with fallback order:
-    1. Streamlit Secrets (st.secrets["GEMINI_API_KEY"]) for Streamlit Community Cloud
-    2. Environment Variable (os.environ.get("GEMINI_API_KEY")) for Docker / Local dev
-    Returns:
-        (api_key, key_source) where key_source is 'secrets', 'env', or 'none'.
-    """
-    # 1. Try Streamlit Secrets (Streamlit Community Cloud)
-    try:
-        if hasattr(st, "secrets"):
-            if "GEMINI_API_KEY" in st.secrets:
-                val = st.secrets["GEMINI_API_KEY"]
-                if val and isinstance(val, str) and val.strip():
-                    return val.strip(), "secrets"
-            elif "general" in st.secrets and isinstance(st.secrets["general"], dict):
-                val = st.secrets["general"].get("GEMINI_API_KEY")
-                if val and isinstance(val, str) and val.strip():
-                    return val.strip(), "secrets"
-    except Exception:
-        pass
-
-    # 2. Try Environment Variable (Docker / Local dev)
-    env_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if env_key:
-        return env_key, "env"
-
-    return "", "none"
-
+    """Load the key and preserve the exact source reported by the service helper."""
+    return load_gemini_api_key_with_source()
 
 # Load key securely on every run/rerun to reflect secrets or env changes
 current_api_key, current_key_source = get_gemini_api_key()
@@ -137,12 +112,14 @@ with st.sidebar:
     is_configured = st.session_state.gemini_service.is_configured()
     key_source = st.session_state.get("gemini_key_source", "none")
 
-    # Safe Status Badge without exposing secret values
+    # Format validation is not proof of a successful API connection.
+    # Safe status badge without exposing secret values.
     if is_configured:
         source_label = "Streamlit Secrets" if key_source == "secrets" else "Environment"
         st.markdown(
             f"<div style='background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px;'>"
-            f"<span style='color: #065F46; font-weight: 600; font-size: 0.85rem;'>● AI Key Active ({source_label})</span>"
+            f"<span style='color: #065F46; font-weight: 600; font-size: 0.85rem;'>● Key format accepted ({source_label})</span>"
+            "<div style='color: #065F46; font-size: 0.75rem;'>Connection not verified — use Test API Connection.</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
