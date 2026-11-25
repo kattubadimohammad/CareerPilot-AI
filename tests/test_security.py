@@ -27,7 +27,7 @@ def test_logger_sensitive_data_scrubbing():
         level=logging.INFO,
         pathname=__file__,
         lineno=10,
-        msg="User john.doe@company.com with key AIzaSyDUMMYKEY12345678901234567890123 logged in.",
+        msg="User john.doe@company.com with keys AIzaSyDUMMYKEY12345678901234567890123 and AQ.AQTESTKEY012345678901234567890123456789 logged in.",
         args=(),
         exc_info=None,
     )
@@ -38,6 +38,7 @@ def test_logger_sensitive_data_scrubbing():
     assert "[REDACTED_EMAIL]" in formatted
     assert "AIzaSyDUMMYKEY12345678901234567890123" not in formatted
     assert "[REDACTED_KEY]" in formatted
+    assert "AQ.AQTESTKEY012345678901234567890123456789" not in formatted
 
 
 def test_gemini_auth_error_key_scrubbing():
@@ -208,3 +209,33 @@ def test_gemini_configuration_diagnostics_do_not_expose_key(monkeypatch):
     assert "environment:GEMINI_API_KEY" in rendered
     assert "Missing or invalid format" in rendered
     assert secret_value not in rendered
+
+
+def test_aq_format_gemini_key_is_accepted_and_redacted(monkeypatch):
+    """Accept the newer Google AI Studio AQ. key format without exposing it."""
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+    from pathlib import Path
+
+    aq_key = "AQ.AQTESTKEY012345678901234567890123456789"
+    monkeypatch.setattr(st, "secrets", {"GEMINI_API_KEY": aq_key})
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    svc = GeminiService()
+    assert svc.api_key == aq_key
+    assert svc.is_configured() is True
+    diagnostics = svc.get_diagnostic_info()
+    assert diagnostics["key_prefix"] == "AQ."
+    assert diagnostics["starts_with_aq"] is True
+    assert aq_key not in str(diagnostics)
+
+    app_path = str(Path(__file__).resolve().parent.parent / "app.py")
+    at = AppTest.from_file(app_path)
+    at.run(timeout=10)
+    rendered = " ".join(
+        [item.value for item in at.markdown]
+        + [item.value for item in at.caption]
+        + [item.value for item in at.text]
+    )
+    assert "Recognized key prefix: AQ." in rendered
+    assert aq_key not in rendered
