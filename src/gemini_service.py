@@ -14,9 +14,9 @@ DEFAULT_MODEL = "gemini-3.5-flash"
 PREFERRED_MODELS = [DEFAULT_MODEL, "gemini-3.5-flash-lite"]
 DEFAULT_UNVERIFIED_MODELS = PREFERRED_MODELS.copy()
 AVAILABLE_MODELS = DEFAULT_UNVERIFIED_MODELS.copy()
-_KEY_PATTERN = re.compile(r"AIza[0-9A-Za-z_+\-/=]{20,}")
+_KEY_PATTERN = re.compile(r"(?:AIza[0-9A-Za-z_+\-/=]{20,}|AQ\.[0-9A-Za-z_-]{20,})")
 # A shape check only; Google remains the authority on whether a key is valid.
-_KEY_FORMAT_PATTERN = re.compile(r"^AIza[0-9A-Za-z_+\-/=]{21,}$")
+_KEY_FORMAT_PATTERN = re.compile(r"^(?:AIza[0-9A-Za-z_+\-/=]{21,}|AQ\.[0-9A-Za-z_-]{20,})$")
 
 
 def _scrub_sensitive_string(value: Any) -> str:
@@ -152,6 +152,8 @@ class GeminiService:
             "key_detected": bool(key),
             "key_length": len(key),
             "starts_with_aiza": key.startswith("AIza"),
+            "starts_with_aq": key.startswith("AQ."),
+            "key_prefix": "AQ." if key.startswith("AQ.") else ("AIza" if key.startswith("AIza") else "Unrecognized"),
             "is_configured": self.is_configured(),
             "key_status": "format_valid_unverified" if self.is_configured() else "missing_or_invalid_format",
             "format_status": "Format accepted; connection not verified" if self.is_configured() else "Missing or invalid format",
