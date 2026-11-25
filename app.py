@@ -119,7 +119,7 @@ with st.sidebar:
         st.markdown(
             f"<div style='background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px;'>"
             f"<span style='color: #065F46; font-weight: 600; font-size: 0.85rem;'>● Key format accepted ({source_label})</span>"
-            "<div style='color: #065F46; font-size: 0.75rem;'>Connection not verified — use Test API Connection.</div>"
+            f"<div style='color: #065F46; font-size: 0.75rem;'>{'Connection verified — Gemini API test passed.' if st.session_state.get('gemini_connection_verified') is True else ('Last connection test failed — check the error below.' if st.session_state.get('gemini_connection_verified') is False else 'Connection not verified — use Test API Connection.')}</div>"
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -155,6 +155,7 @@ with st.sidebar:
     if st.button("Test API Connection", width="stretch"):
         with st.spinner("Testing connection..."):
             ok, msg = st.session_state.gemini_service.test_connection()
+            st.session_state.gemini_connection_verified = bool(ok)
             if ok:
                 st.success(msg)
             else:
@@ -237,7 +238,6 @@ if nav_selection == "📊 Executive Dashboard":
         )
 
     st.markdown("<br>", unsafe_allow_html=True)
-
     # Quick Start Guide & Active Context
     col_left, col_right = st.columns([3, 2])
 
@@ -685,8 +685,12 @@ elif nav_selection == "🎤 Interview Coach":
         with st.spinner("Generating role-specific interview simulation..."):
             questions = coach.get_questions_for_role(target_role, skills=active_skills, count=q_count)
             st.session_state.current_interview_questions = questions
+            st.session_state.current_interview_role = target_role
             st.session_state.current_interview_answers = {}
             st.session_state.current_interview_evaluations = {}
+            st.session_state.saved_interview_session_id = None
+            for answer_index in range(5):
+                st.session_state.pop(f"ans_{answer_index}", None)
 
     if "current_interview_questions" in st.session_state:
         questions = st.session_state.current_interview_questions
@@ -708,6 +712,7 @@ elif nav_selection == "🎤 Interview Coach":
                 height=150,
                 placeholder="Structure your answer using Context/Situation, Action taken, and Measurable Results...",
             )
+            st.session_state.current_interview_answers[idx] = user_ans
 
             col_eval, _ = st.columns([1, 3])
             with col_eval:
@@ -717,7 +722,6 @@ elif nav_selection == "🎤 Interview Coach":
                 with st.spinner("Evaluating your answer against professional interview rubric..."):
                     evaluation = coach.evaluate_answer(q.get("question"), user_ans, role=target_role)
                     st.session_state.current_interview_evaluations[idx] = evaluation
-
             # Display evaluation for this question if available
             if idx in st.session_state.get("current_interview_evaluations", {}):
                 ev = st.session_state.current_interview_evaluations[idx]
@@ -753,23 +757,35 @@ elif nav_selection == "🎤 Interview Coach":
 
             st.divider()
 
-        # Save session button
-        if st.session_state.get("current_interview_evaluations"):
-            if st.button("💾 Save Completed Interview Session to Database", type="primary"):
-                evals = st.session_state.current_interview_evaluations
-                scores = [e.get("overall_score", 0) for e in evals.values()]
-                avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+        # Save only a fully evaluated session, and prevent duplicate saves on reruns.
+        evaluations = st.session_state.get("current_interview_evaluations", {})
+        answers = st.session_state.get("current_interview_answers", {})
+        evaluated_count = sum(1 for idx in range(len(questions)) if idx in evaluations and answers.get(idx, "").strip())
+        total_questions = len(questions)
+        st.caption(f"Interview progress: {evaluated_count}/{total_questions} answers evaluated.")
 
+        saved_session_id = st.session_state.get("saved_interview_session_id")
+        if saved_session_id:
+            st.success(f"Interview session saved successfully (ID #{saved_session_id}).")
+        elif evaluated_count == total_questions and total_questions > 0:
+            if st.button("💾 Save Completed Interview Session to Database", type="primary"):
+                scores = [evaluations[idx].get("overall_score", 0) for idx in range(total_questions)]
+                avg_score = round(sum(scores) / total_questions, 1)
+                session_payload = {
+                    "questions": questions,
+                    "answers": {str(idx): answers.get(idx, "") for idx in range(total_questions)},
+                    "evaluations": {str(idx): evaluations[idx] for idx in range(total_questions)},
+                }
                 sess_id = db.save_interview_session(
                     resume_id=st.session_state.active_resume_id,
-                    target_role=target_role,
-                    session_data={
-                        "questions": questions,
-                        "evaluations": evals,
-                    },
+                    target_role=st.session_state.get("current_interview_role", target_role),
+                    session_data=session_payload,
                     overall_score=avg_score,
                 )
+                st.session_state.saved_interview_session_id = sess_id
                 st.success(f"Interview session saved successfully (ID #{sess_id}) with overall score of {avg_score}%!")
+        elif evaluated_count > 0:
+            st.info("Evaluate every question before saving the completed interview session.")
 
 
 # ==============================================================================
