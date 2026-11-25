@@ -131,20 +131,16 @@ class GeminiService:
         """Return safe configuration diagnostics; never include the credential itself."""
         secrets_available = False
         secret_names: List[str] = []
-        source = "none"
         try:
             import streamlit as st
             secrets = st.secrets
             secrets_available = True
             secret_names = [str(k) for k in secrets.keys()]
-            if "GEMINI_API_KEY" in secrets:
-                source = "st.secrets['GEMINI_API_KEY']"
-            elif "general" in secrets:
-                source = "st.secrets['general']"
         except Exception:
             pass
-        if not source.startswith("st.secrets") and os.environ.get("GEMINI_API_KEY"):
-            source = "environment"
+        loaded_key, detected_source = load_gemini_api_key_with_source()
+        current_key = self.sanitize_key(self.api_key)
+        source = detected_source if loaded_key and loaded_key == current_key else ("explicitly_supplied" if current_key else "none")
         key = self.sanitize_key(self.api_key)
         return {
             "git_commit": os.environ.get("GIT_COMMIT", "unknown"),
