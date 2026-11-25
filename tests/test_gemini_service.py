@@ -98,7 +98,7 @@ def test_gemini_is_configured_strict_format_validation():
         "key with spaces inside 12345678901234567890",
         "AIzaSyInvalid@Character123456789012345",  # Unsupported punctuation
         "AIzaSyInvalid:Character123456789012345",  # Unsupported punctuation
-        "AIzaSyInvalid\\nCharacter123456789012345",  # Embedded newline
+        "AIzaSyInvalid\nCharacter123456789012345",  # Embedded newline
     ]
     for bad_key in bad_strings:
         svc = GeminiService(api_key=bad_key)
