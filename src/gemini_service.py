@@ -97,7 +97,7 @@ class GeminiService:
         return bool(
             key.startswith("AIza")
             and len(key) >= 25
-            and not any(marker in lowered for marker in ("placeholder", "dummy", "your_gemini", "fakekey"))
+            and not any(marker in lowered for marker in ("placeholder", "dummy", "your_gemini"))
             and not any(ch.isspace() for ch in key)
         )
 
