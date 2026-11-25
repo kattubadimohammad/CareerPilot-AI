@@ -22,8 +22,8 @@ def _scrub_sensitive_string(value: Any) -> str:
     return _KEY_PATTERN.sub("[REDACTED_KEY]", str(value))
 
 
-def load_gemini_api_key() -> str:
-    """Load only explicitly named Gemini/Google API-key settings, then env fallback."""
+def load_gemini_api_key_with_source() -> Tuple[str, str]:
+    """Load a Gemini key and report the exact supported source that supplied it."""
     try:
         import streamlit as st
         secrets = st.secrets
@@ -34,7 +34,7 @@ def load_gemini_api_key() -> str:
             except Exception:
                 value = None
             if isinstance(value, str) and value.strip():
-                return GeminiService.sanitize_key(value)
+                return GeminiService.sanitize_key(value), f"st.secrets[{name!r}]"
         for section in ("gemini", "google", "general"):
             try:
                 table = secrets.get(section, {})
@@ -44,11 +44,18 @@ def load_gemini_api_key() -> str:
                 for name in ("api_key", "GEMINI_API_KEY", "gemini_api_key", "GOOGLE_API_KEY"):
                     value = table.get(name)
                     if isinstance(value, str) and value.strip():
-                        return GeminiService.sanitize_key(value)
+                        return GeminiService.sanitize_key(value), f"st.secrets[{section!r}][{name!r}]"
     except Exception:
         pass
-    return GeminiService.sanitize_key(os.environ.get("GEMINI_API_KEY", ""))
+    env_value = os.environ.get("GEMINI_API_KEY", "")
+    if env_value.strip():
+        return GeminiService.sanitize_key(env_value), "environment:GEMINI_API_KEY"
+    return "", "none"
 
+
+def load_gemini_api_key() -> str:
+    """Backward-compatible helper returning only the Gemini API key."""
+    return load_gemini_api_key_with_source()[0]
 
 class GeminiService:
     """Manages Gemini API communication without exposing credentials."""
@@ -92,6 +99,7 @@ class GeminiService:
             self._client = None
 
     def is_configured(self) -> bool:
+        """Return whether the key has an acceptable format; this does not verify connectivity."""
         key = self.sanitize_key(self.api_key)
         lowered = key.lower()
         return bool(
@@ -147,7 +155,8 @@ class GeminiService:
             "key_length": len(key),
             "starts_with_aiza": key.startswith("AIza"),
             "is_configured": self.is_configured(),
-            "format_status": "Valid format" if self.is_configured() else "Missing or invalid format",
+            "key_status": "format_valid_unverified" if self.is_configured() else "missing_or_invalid_format",
+            "format_status": "Format accepted; connection not verified" if self.is_configured() else "Missing or invalid format",
         }
 
     def test_connection(self) -> Tuple[bool, str]:
