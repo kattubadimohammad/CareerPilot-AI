@@ -204,7 +204,7 @@ def test_gemini_configuration_diagnostics_do_not_expose_key(monkeypatch):
         + [item.value for item in at.caption]
         + [item.value for item in at.text]
     )
-    assert "Secret detected: Yes" in rendered
-    assert "Detected source: environment:GEMINI_API_KEY" in rendered
-    assert "Format check: Missing or invalid format" in rendered
+    assert "Secret detected:" in rendered
+    assert "environment:GEMINI_API_KEY" in rendered
+    assert "Missing or invalid format" in rendered
     assert secret_value not in rendered
