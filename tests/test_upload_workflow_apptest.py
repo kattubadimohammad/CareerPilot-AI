@@ -2,14 +2,56 @@
 Uses Streamlit AppTest to verify real interactive UI behaviors, file uploads,
 session state preservation, and error handling.
 """
+from io import BytesIO
 from pathlib import Path
-import pytest
+
+import fitz
+from docx import Document
 from streamlit.testing.v1 import AppTest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 APP_PATH = str(BASE_DIR / "app.py")
-SAMPLE_PDF = BASE_DIR / "data" / "sample_resume.pdf"
-SAMPLE_DOCX = BASE_DIR / "data" / "sample_resume.docx"
+SAMPLE_RESUME_TEXT = """
+ALEX MORGAN
+Senior Data Analyst
+Email: alex.morgan@example.com
+Phone: +1 555 010 2020
+
+PROFESSIONAL SUMMARY
+Data analyst with experience building dashboards, analyzing business performance,
+and automating reporting workflows.
+
+SKILLS
+Python, SQL, Excel, Power BI, Tableau, Data Analysis, Data Visualization
+
+EXPERIENCE
+Senior Data Analyst | Example Company | 2021 - 2025
+Built SQL reporting pipelines and Power BI dashboards for business stakeholders.
+
+EDUCATION
+Bachelor of Science in Information Systems
+""".strip()
+
+
+def make_sample_pdf():
+    """Build a deterministic PDF fixture at test time."""
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 72), SAMPLE_RESUME_TEXT, fontsize=10)
+    content = document.tobytes()
+    document.close()
+    return content
+
+
+def make_sample_docx():
+    """Build a deterministic DOCX fixture at test time."""
+    document = Document()
+    for line in SAMPLE_RESUME_TEXT.splitlines():
+        if line.strip():
+            document.add_paragraph(line)
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
 
 
 def test_resume_intelligence_navigation_and_ready_state():
@@ -36,7 +78,7 @@ def test_resume_intelligence_navigation_and_ready_state():
 
 def test_pdf_resume_upload_and_analysis_workflow():
     """Verify end-to-end upload of a PDF resume produces active analysis results."""
-    pdf_bytes = SAMPLE_PDF.read_bytes()
+    pdf_bytes = make_sample_pdf()
     at = AppTest.from_file(APP_PATH)
     at.run(timeout=10)
 
@@ -63,7 +105,7 @@ def test_pdf_resume_upload_and_analysis_workflow():
 
 def test_docx_resume_upload_and_analysis_workflow():
     """Verify end-to-end upload of a DOCX resume produces active analysis results."""
-    docx_bytes = SAMPLE_DOCX.read_bytes()
+    docx_bytes = make_sample_docx()
     at = AppTest.from_file(APP_PATH)
     at.run(timeout=10)
 
@@ -83,7 +125,7 @@ def test_docx_resume_upload_and_analysis_workflow():
 
 def test_mobile_bom_pdf_upload_and_analysis_workflow():
     """Verify that a mobile-exported PDF with UTF-8 BOM uploads and analyzes seamlessly."""
-    pdf_bytes = b"\xef\xbb\xbf" + SAMPLE_PDF.read_bytes()
+    pdf_bytes = b"\xef\xbb\xbf" + make_sample_pdf()
     at = AppTest.from_file(APP_PATH)
     at.run(timeout=10)
 
@@ -129,7 +171,7 @@ def test_invalid_magic_bytes_upload_error_handling():
 
 def test_rerun_preserves_active_session_state():
     """Verify that rerunning the script (simulating tab switches or UI clicks) preserves analysis results."""
-    pdf_bytes = SAMPLE_PDF.read_bytes()
+    pdf_bytes = make_sample_pdf()
     at = AppTest.from_file(APP_PATH)
     at.run(timeout=10)
 
