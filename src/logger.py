@@ -5,7 +5,7 @@ import logging
 import os
 import re
 
-API_KEY_REGEX = re.compile(r"AIza[0-9A-Za-z-_]{25,50}")
+API_KEY_REGEX = re.compile(r"(?:AIza[0-9A-Za-z-_]{25,50}|AQ\.[0-9A-Za-z_-]{20,})")
 EMAIL_REGEX = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 PHONE_REGEX = re.compile(r"(\+?\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}")
 
