@@ -819,28 +819,49 @@ elif nav_selection == "🗺️ Career Roadmap":
     st.markdown("### 👤 Candidate Profile & Skills Baseline")
     saved_resumes = db.list_resumes()
 
-    if saved_resumes:
-        resume_options = {
-            r["id"]: f"#{r['id']} - {r['candidate_name']} ({r['filename']}) — {str(r.get('created_at', ''))[:16]}"
-            for r in saved_resumes
-        }
-        res_ids = list(resume_options.keys())
+    # Build options dictionary: saved database resumes + demonstration profile
+    resume_options = {}
+    for r in saved_resumes:
+        resume_options[r["id"]] = f"#{r['id']} - {r['candidate_name']} ({r['filename']}) — {str(r.get('created_at', ''))[:16]}"
+
+    DEMO_KEY = "demo_profile"
+    resume_options[DEMO_KEY] = "🚀 Demonstration Profile (Alex Morgan — Cloud & Data Engineer)"
+
+    option_keys = list(resume_options.keys())
+
+    # Determine default selection index
+    default_idx = 0
+    if st.session_state.active_resume_id in option_keys:
+        default_idx = option_keys.index(st.session_state.active_resume_id)
+    elif saved_resumes:
         default_idx = 0
-        if st.session_state.active_resume_id in res_ids:
-            default_idx = res_ids.index(st.session_state.active_resume_id)
+    elif DEMO_KEY in option_keys:
+        default_idx = option_keys.index(DEMO_KEY)
 
-        selected_id = st.selectbox(
-            "Select Candidate Profile to Personalize Roadmap",
-            options=res_ids,
-            index=default_idx,
-            format_func=lambda x: resume_options[x],
-            key="roadmap_profile_selector",
-        )
+    selected_key = st.selectbox(
+        "Select Candidate Profile to Personalize Roadmap",
+        options=option_keys,
+        index=default_idx,
+        format_func=lambda x: resume_options[x],
+        key="roadmap_profile_selector",
+    )
 
-        if st.session_state.active_resume_id != selected_id or not st.session_state.active_resume_data:
-            chosen = db.get_resume(selected_id)
+    # Synchronize candidate profile state based on selection
+    if selected_key == DEMO_KEY:
+        if st.session_state.active_resume_id != DEMO_KEY or not st.session_state.active_resume_data:
+            st.session_state.active_resume_id = DEMO_KEY
+            st.session_state.active_resume_data = {
+                "candidate_name": "Alex Morgan",
+                "email": "alex.morgan@example.com",
+                "skills": ["Python", "SQL", "Docker", "Kubernetes", "AWS", "PostgreSQL", "Redis", "CI/CD", "Terraform", "Go"],
+                "score": 85,
+            }
+            st.session_state.active_resume_text = "Alex Morgan Senior Cloud Engineer Python SQL Docker Kubernetes AWS PostgreSQL Redis CI/CD Terraform"
+    else:
+        if st.session_state.active_resume_id != selected_key or not st.session_state.active_resume_data:
+            chosen = db.get_resume(selected_key)
             if chosen:
-                st.session_state.active_resume_id = selected_id
+                st.session_state.active_resume_id = selected_key
                 st.session_state.active_resume_data = chosen.get("parsed_data", {})
                 st.session_state.active_resume_text = chosen.get("raw_text", "")
 
@@ -859,26 +880,7 @@ elif nav_selection == "🗺️ Career Roadmap":
         else:
             st.caption("No specific skills extracted from this profile. Evaluating standard foundations.")
     else:
-        st.warning("No candidate resumes found in the database. Evaluating against standard junior-to-mid foundation.")
-        col_load_demo, _ = st.columns([2, 2])
-        with col_load_demo:
-            if st.button("🚀 Load Sample Resume Profile Now", type="secondary", width="stretch"):
-                sample_pdf = load_sample_file("sample_resume.pdf")
-                if sample_pdf:
-                    text, ftype = DocumentParser.extract_text(sample_pdf, "sample_resume.pdf")
-                    analyzer = ResumeAnalyzer(st.session_state.gemini_service)
-                    parsed = analyzer.analyze_resume(text, "sample_resume.pdf")
-                    res_id = db.save_resume(
-                        filename="sample_resume.pdf",
-                        file_type="pdf",
-                        raw_text=text,
-                        candidate_name=parsed.get("candidate_name", "Alex Morgan"),
-                        parsed_data=parsed,
-                    )
-                    st.session_state.active_resume_data = parsed
-                    st.session_state.active_resume_text = text
-                    st.session_state.active_resume_id = res_id
-                    st.rerun()
+        st.caption("Evaluating against standard junior-to-mid foundation.")
 
     roadmap_gen = CareerRoadmapGenerator(st.session_state.gemini_service)
 
