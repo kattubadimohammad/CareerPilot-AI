@@ -25,7 +25,7 @@ class JobMatcher:
         "analytical skills": ["analysis", "analyzed", "analysed", "data-driven", "identified trends"],
     }
     BEHAVIORAL_EVIDENCE = {
-        "communication": ["stakeholder", "coordinated", "collaborated", "presented", "reported", "communicated"],
+        "communication": ["stakeholder", "stakeholders", "coordinated", "collaborated", "presented", "reported", "communicated"],
         "cross-functional collaboration": ["stakeholder", "coordinated", "collaborated", "cross-functional", "worked with"],
         "leadership": ["led", "owned", "spearheaded", "mentored", "managed"],
         "problem solving": ["root cause", "resolved", "troubleshot", "identified", "mitigated"],
@@ -266,8 +266,8 @@ class JobMatcher:
             "job_title_used_for_seniority": scoring["job_title_used_for_seniority"],
             "recommendations": recommendations,
             "ethical_notice": (
-                "Only include skills, tools, credentials, dates, metrics, and achievements that are "
-                "accurately supported by your actual experience."
+                "ETHICAL ATS OPTIMIZATION GUARDRAIL: Only include skills, tools, credentials, dates, metrics, "
+                "and achievements that are accurately supported by your actual experience."
             ),
         }
 
