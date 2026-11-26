@@ -30,6 +30,16 @@ TAXONOMY_SKILLS = {
     # Soft & Management Skills
     "Leadership", "Mentoring", "Project Management", "Problem Solving",
     "Communication", "Cross-functional Collaboration", "Analytical Skills",
+    # Business intelligence and analytics
+    "Excel", "Advanced Excel", "PivotTables", "VLOOKUP", "XLOOKUP", "Power BI",
+    "Tableau", "Business Intelligence", "Data Analysis", "Dashboards", "KPI Reporting",
+    "ETL", "Data Visualization", "Reporting", "Forecasting",
+    # Supply chain, procurement, and operations
+    "Supply Chain", "Inventory Management", "Demand Forecasting", "Replenishment Planning",
+    "Procurement Analytics", "Procurement", "Supplier Performance", "Supplier Management",
+    "PO Lifecycle Management", "Purchase Orders", "Sourcing", "Logistics",
+    "Vendor Management", "ERP", "SAP", "Oracle", "SOH", "DOH", "Fill Rate",
+    "Instock", "Sell-through", "Lead Time", "On-time Delivery", "Stakeholder Management",
 }
 
 # Precompiled regex patterns for high-throughput skill extraction
