@@ -20,8 +20,6 @@ class JobMatcher:
         "po lifecycle management": ["purchase orders", "purchase order", "po lifecycle", "po revisions"],
         "purchase orders": ["purchase order", "po lifecycle", "po revisions"],
         "supplier performance": ["supplier lead time", "lead time", "on-time delivery", "fill rate", "vendor performance"],
-        "communication": ["stakeholder", "coordinated", "collaborated", "presented", "reported", "cross-functional"],
-        "cross-functional collaboration": ["stakeholder", "coordinated", "collaborated", "cross-functional", "worked with"],
         "analytical skills": ["analysis", "analyzed", "analysed", "data-driven", "identified trends"],
     }
     BEHAVIORAL_EVIDENCE = {
