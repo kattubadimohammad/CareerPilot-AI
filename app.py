@@ -141,6 +141,17 @@ with st.sidebar:
         st.write(f"**Format check:** {diagnostics['format_status']}")
         st.write(f"**Streamlit Secrets available:** {'Yes' if diagnostics['st_secrets_available'] else 'No'}")
         st.write(f"**Secret names visible to app:** {', '.join(diagnostics['st_secrets_keys']) or 'None'}")
+        st.write(f"**Primary model:** {diagnostics.get('primary_model', 'gemini-3.5-flash')}")
+        st.write(f"**Fallback model:** {diagnostics.get('fallback_model', 'gemini-3.5-flash-lite')}")
+        if diagnostics.get("last_used_model"):
+            st.write(f"**Active model in session:** `{diagnostics['last_used_model']}`")
+        if diagnostics.get("last_failover_diagnostics"):
+            st.markdown("**Recent Attempt / Failover Log:**")
+            for item in diagnostics["last_failover_diagnostics"]:
+                err_detail = f" — {item.get('error', '')}" if item.get('error') else ""
+                st.write(f"- `{item['model']}`: {item['status']}{err_detail}")
+        if diagnostics.get("last_error_safe"):
+            st.caption(f"ℹ️ {diagnostics['last_error_safe']}")
         st.caption("For security, the API key value is never displayed.")
 
     # Model Selection: Primary gemini-3.5-flash, Fallback gemini-3.5-flash-lite
@@ -665,12 +676,15 @@ elif nav_selection == "🎤 Interview Coach":
                 "Full Stack Developer",
                 "Data Scientist / ML Engineer",
                 "DevOps / Cloud Engineer",
+                "Data Analyst",
+                "Supply Chain Analyst",
+                "Business Analyst",
                 "Custom Position",
             ],
             index=0,
         )
         if target_role == "Custom Position":
-            target_role = st.text_input("Enter Custom Position Title", "Senior Software Engineer")
+            target_role = st.text_input("Enter Custom Position Title", "Data Analyst – Supply Chain Analytics")
 
     with col_count:
         q_count = st.number_input("Question Count", min_value=1, max_value=5, value=3)
@@ -787,23 +801,84 @@ elif nav_selection == "🗺️ Career Roadmap":
                 "Senior Backend Engineer",
                 "AI / Machine Learning Engineer",
                 "Cloud & DevOps Architect",
+                "Data Analyst / Business Intelligence",
+                "Supply Chain Analyst / Operations Analytics",
+                "Data Engineer",
+                "Full Stack Developer",
                 "Custom Role",
             ],
             index=0,
         )
         if target_role == "Custom Role":
-            target_role = st.text_input("Enter Target Role", "Principal Architect")
+            target_role = st.text_input("Enter Target Role", "Data Analyst – Supply Chain Analytics")
 
     with col_months:
         timeline_months = st.selectbox("Target Horizon", [3, 6, 12], index=1)
 
-    # Active Skills Context
+    # Candidate Resume Profile Selection & Personalization
+    st.markdown("### 👤 Candidate Profile & Skills Baseline")
+    saved_resumes = db.list_resumes()
+
+    if saved_resumes:
+        resume_options = {
+            r["id"]: f"#{r['id']} - {r['candidate_name']} ({r['filename']}) — {str(r.get('created_at', ''))[:16]}"
+            for r in saved_resumes
+        }
+        res_ids = list(resume_options.keys())
+        default_idx = 0
+        if st.session_state.active_resume_id in res_ids:
+            default_idx = res_ids.index(st.session_state.active_resume_id)
+
+        selected_id = st.selectbox(
+            "Select Candidate Profile to Personalize Roadmap",
+            options=res_ids,
+            index=default_idx,
+            format_func=lambda x: resume_options[x],
+            key="roadmap_profile_selector",
+        )
+
+        if st.session_state.active_resume_id != selected_id or not st.session_state.active_resume_data:
+            chosen = db.get_resume(selected_id)
+            if chosen:
+                st.session_state.active_resume_id = selected_id
+                st.session_state.active_resume_data = chosen.get("parsed_data", {})
+                st.session_state.active_resume_text = chosen.get("raw_text", "")
+
+    # Display active candidate verified skills
     current_skills = []
     if st.session_state.active_resume_data:
-        current_skills = st.session_state.active_resume_data.get("skills", [])
-        st.write(f"Using **{len(current_skills)} verified skills** from active resume.")
+        res_data = st.session_state.active_resume_data
+        cand_name = res_data.get("candidate_name") or "Candidate"
+        current_skills = res_data.get("skills", [])
+        st.success(f"**Loaded Profile:** {cand_name} (ID #{st.session_state.active_resume_id})")
+        if current_skills:
+            st.write(f"**Verified Proven Skills ({len(current_skills)}):**")
+            pills = " ".join([f"<span class='skill-pill pill-match'>{html.escape(str(s))}</span>" for s in current_skills])
+            st.markdown(pills, unsafe_allow_html=True)
+            st.caption("✅ Proven skills will be respected and excluded from critical prerequisites.")
+        else:
+            st.caption("No specific skills extracted from this profile. Evaluating standard foundations.")
     else:
-        st.caption("No active resume loaded. Evaluating against standard junior-to-mid foundation.")
+        st.warning("No candidate resumes found in the database. Evaluating against standard junior-to-mid foundation.")
+        col_load_demo, _ = st.columns([2, 2])
+        with col_load_demo:
+            if st.button("🚀 Load Sample Resume Profile Now", type="secondary", width="stretch"):
+                sample_pdf = load_sample_file("sample_resume.pdf")
+                if sample_pdf:
+                    text, ftype = DocumentParser.extract_text(sample_pdf, "sample_resume.pdf")
+                    analyzer = ResumeAnalyzer(st.session_state.gemini_service)
+                    parsed = analyzer.analyze_resume(text, "sample_resume.pdf")
+                    res_id = db.save_resume(
+                        filename="sample_resume.pdf",
+                        file_type="pdf",
+                        raw_text=text,
+                        candidate_name=parsed.get("candidate_name", "Alex Morgan"),
+                        parsed_data=parsed,
+                    )
+                    st.session_state.active_resume_data = parsed
+                    st.session_state.active_resume_text = text
+                    st.session_state.active_resume_id = res_id
+                    st.rerun()
 
     roadmap_gen = CareerRoadmapGenerator(st.session_state.gemini_service)
 
