@@ -890,3 +890,7 @@ elif nav_selection == "🗺️ Career Roadmap":
             st.subheader("📚 Recommended Certifications & Resources")
             for res in rm["recommended_certifications_and_resources"]:
                 st.markdown(f"- 📖 {res}")
+
+# VibeForge submission attribution
+st.divider()
+st.caption("Built for VibeForge 2026 by Mohammad Kattubadi")
