@@ -88,6 +88,66 @@ ROLE_QUESTION_BANKS = {
             "context": "Demonstrate systematic troubleshooting, communication to leadership, and long-term remediation.",
         },
     ],
+    "Data Analyst": [
+        {
+            "id": 1,
+            "type": "SQL & Quantitative Analysis",
+            "question": "How do you design, optimize, and validate complex SQL queries (e.g., window functions, CTEs, self-joins) to calculate critical business metrics from large datasets?",
+            "context": "Address performance optimization, aggregation accuracy, handling nulls/duplicates, and dimensional modeling.",
+        },
+        {
+            "id": 2,
+            "type": "Data Integrity & Problem Solving",
+            "question": "When analyzing business performance, how do you handle missing values, anomalies, or discrepancies across disparate data sources before presenting findings to leadership?",
+            "context": "Focus on data validation pipelines, outlier detection, stakeholder reconciliation, and reporting confidence intervals.",
+        },
+        {
+            "id": 3,
+            "type": "Behavioral / Stakeholder Storytelling",
+            "question": "Describe a project where your data analysis directly uncovered an operational bottleneck or influenced a major business decision. How did you present your findings to non-technical stakeholders?",
+            "context": "Use STAR format. Emphasize data visualization, translation of statistical findings into business ROI, and executive alignment.",
+        },
+    ],
+    "Supply Chain Analyst": [
+        {
+            "id": 1,
+            "type": "Supply Chain & Inventory Modeling",
+            "question": "How do you calculate and optimize inventory reorder points, safety stock, and economic order quantity (EOQ) while balancing customer service levels against working capital holding costs?",
+            "context": "Discuss demand volatility, supplier lead-time distribution, stockout cost modeling, and multi-echelon inventory strategies.",
+        },
+        {
+            "id": 2,
+            "type": "Logistics Problem Solving",
+            "question": "Walk me through how you would diagnose a sudden spike in supplier lead-time variance or inventory stockouts using logistics and ERP purchase-order data.",
+            "context": "Cover root cause analysis, supplier scorecarding, freight route optimization, and buffer stock adjustments.",
+        },
+        {
+            "id": 3,
+            "type": "Behavioral / Cross-Functional Alignment",
+            "question": "Tell me about a situation where your supply chain forecast or capacity model contradicted the intuition of procurement or operations leadership. How did you build consensus and implement changes?",
+            "context": "Use STAR format. Highlight empirical model validation, cross-functional empathy, and operational impact.",
+        },
+    ],
+    "Business Analyst": [
+        {
+            "id": 1,
+            "type": "Business Metrics & KPI Frameworks",
+            "question": "What analytical frameworks and KPIs do you use to evaluate user funnel drop-offs, customer unit economics, and operational efficiency?",
+            "context": "Address cohort analysis, conversion metrics, leading vs lagging indicators, and executive dashboards.",
+        },
+        {
+            "id": 2,
+            "type": "Requirements & Process Optimization",
+            "question": "How do you prioritize competing business requirements or resolve ambiguous analytical requests from different executive stakeholders?",
+            "context": "Focus on impact vs effort prioritization, requirement traceability, and trade-off communication.",
+        },
+        {
+            "id": 3,
+            "type": "Behavioral / Change Management",
+            "question": "Describe a time when an analytical report you produced was challenged by leadership. How did you validate your assumptions and maintain credibility?",
+            "context": "Use STAR format. Highlight transparent methodology, active listening, and objective verification.",
+        },
+    ],
 }
 
 DEFAULT_QUESTIONS = [
@@ -122,27 +182,71 @@ class InterviewCoach:
         self, role: str, skills: Optional[List[str]] = None, count: int = 3
     ) -> List[Dict[str, Any]]:
         """Return tailored interview questions using Gemini or predefined role banks."""
-        # 1. Deterministic bank lookup
-        selected_bank = DEFAULT_QUESTIONS
-        for key in ROLE_QUESTION_BANKS:
-            if key.lower() in role.lower() or role.lower() in key.lower():
-                selected_bank = ROLE_QUESTION_BANKS[key]
-                break
+        role_lower = role.lower().strip()
+        selected_bank = None
+
+        # 1. Deterministic bank lookup with domain-awareness
+        if any(k in role_lower for k in ["supply chain", "logistics", "procurement", "inventory"]):
+            selected_bank = ROLE_QUESTION_BANKS["Supply Chain Analyst"]
+        elif any(k in role_lower for k in ["data analyst", "business intelligence", "bi analyst", "analytics"]):
+            selected_bank = ROLE_QUESTION_BANKS["Data Analyst"]
+        elif any(k in role_lower for k in ["business analyst", "product analyst", "operations analyst"]):
+            selected_bank = ROLE_QUESTION_BANKS["Business Analyst"]
+        elif any(k in role_lower for k in ["data sci", "machine learning", "ml "]):
+            selected_bank = ROLE_QUESTION_BANKS["Data Scientist / ML Engineer"]
+        elif any(k in role_lower for k in ["devops", "cloud", "sre", "infrastructure"]):
+            selected_bank = ROLE_QUESTION_BANKS["DevOps / Cloud Engineer"]
+        elif any(k in role_lower for k in ["full stack", "frontend", "web developer"]):
+            selected_bank = ROLE_QUESTION_BANKS["Full Stack Developer"]
+        elif any(k in role_lower for k in ["backend", "software engineer", "systems engineer", "api"]):
+            selected_bank = ROLE_QUESTION_BANKS["Backend Engineer"]
+
+        if not selected_bank:
+            for key in ROLE_QUESTION_BANKS:
+                if key.lower() in role_lower or role_lower in key.lower():
+                    selected_bank = ROLE_QUESTION_BANKS[key]
+                    break
+
+        if not selected_bank:
+            if any(k in role_lower for k in ["analyst", "analytics"]):
+                selected_bank = ROLE_QUESTION_BANKS["Data Analyst"]
+            else:
+                selected_bank = [
+                    {
+                        "id": 1,
+                        "type": "Technical & Domain Expertise",
+                        "question": f"In your work as a {role}, what core analytical methodologies, domain tools, or technical frameworks do you rely on to deliver rigorous results?",
+                        "context": "Demonstrate practical tool mastery, workflow design, and domain depth.",
+                    },
+                    {
+                        "id": 2,
+                        "type": "Problem Solving",
+                        "question": f"Describe a scenario in your work as a {role} where you faced ambiguous requirements, conflicting data, or tight operational constraints. How did you structure your investigation and deliver a resolution?",
+                        "context": "Focus on root cause analysis, methodical hypothesis testing, and stakeholder alignment.",
+                    },
+                    {
+                        "id": 3,
+                        "type": "Behavioral / STAR",
+                        "question": f"Tell me about a high-impact initiative or project you delivered as a {role}. Walk through the Situation, your specific Task, the Actions you personally executed, and the quantifiable Result achieved.",
+                        "context": "Use STAR format: Situation, Task, Action, Result with quantifiable business outcomes.",
+                    },
+                ]
 
         # If Gemini is configured, generate personalized questions tailored to candidate's skills
         if self.gemini_service and self.gemini_service.is_configured():
             skills_str = ", ".join(skills[:8]) if skills else "Standard technical competencies"
             prompt = f"""
-You are an expert technical interviewer at a top technology company.
+You are an expert interviewer at a leading organization.
 Generate {count} rigorous, realistic interview questions for the role: "{role}".
 The candidate has background in: {skills_str}.
 
-Include 1 technical/architecture question, 1 problem-solving question, and 1 behavioral (STAR method) question.
+CRITICAL GUIDELINE: Tailor all questions specifically to the domain of "{role}". Do NOT ask software architecture or distributed systems questions if the role is a Data Analyst, Supply Chain Analyst, or business analytics position.
+Include 1 technical/domain question, 1 problem-solving question, and 1 behavioral (STAR method) question.
 Return ONLY valid JSON matching this schema:
 [
     {{
         "id": 1,
-        "type": "Technical Architecture",
+        "type": "Technical Domain",
         "question": "Full question text",
         "context": "What a top interviewer looks for in a strong response"
     }}
@@ -150,7 +254,7 @@ Return ONLY valid JSON matching this schema:
 """
             ai_data, is_ai, _ = self.gemini_service.generate_json_response(
                 prompt=prompt,
-                system_instruction="You are a senior tech interview coach. Always respond in valid raw JSON array.",
+                system_instruction="You are a senior interview coach. Always respond in valid raw JSON array.",
                 fallback_data=selected_bank,
             )
             if is_ai and isinstance(ai_data, list) and len(ai_data) > 0:

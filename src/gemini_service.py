@@ -68,6 +68,9 @@ class GeminiService:
         # Do not let stale/deprecated environment settings override the approved hierarchy.
         self.model_name = configured_model if configured_model in PREFERRED_MODELS else DEFAULT_MODEL
         self._client = None
+        self.last_used_model: Optional[str] = None
+        self.last_failover_diagnostics: List[Dict[str, Any]] = []
+        self.last_error_safe: Optional[str] = None
         if self.api_key:
             self._init_client()
 
@@ -157,6 +160,12 @@ class GeminiService:
             "is_configured": self.is_configured(),
             "key_status": "format_valid_unverified" if self.is_configured() else "missing_or_invalid_format",
             "format_status": "Format accepted; connection not verified" if self.is_configured() else "Missing or invalid format",
+            "configured_models": PREFERRED_MODELS,
+            "primary_model": self.model_name,
+            "fallback_model": PREFERRED_MODELS[-1] if len(PREFERRED_MODELS) > 1 else None,
+            "last_used_model": self.last_used_model,
+            "last_failover_diagnostics": self.last_failover_diagnostics,
+            "last_error_safe": self.last_error_safe,
         }
 
     def test_connection(self) -> Tuple[bool, str]:
@@ -168,24 +177,32 @@ class GeminiService:
             return False, "Gemini client failed initialization."
         models = [self.model_name] + [m for m in PREFERRED_MODELS if m != self.model_name]
         errors = []
+        self.last_failover_diagnostics = []
         for model in models:
             try:
                 response = self._client.models.generate_content(
                     model=model, contents="Ping. Respond with one word: OK"
                 )
                 if response and getattr(response, "text", None):
+                    self.last_used_model = model
+                    self.last_failover_diagnostics.append({"model": model, "status": "success"})
                     return True, f"Connected to {model} successfully."
                 errors.append(f"{model}: empty response")
+                self.last_failover_diagnostics.append({"model": model, "status": "failed", "error": "empty response"})
             except Exception as exc:
                 err = _scrub_sensitive_string(exc)
+                self.last_failover_diagnostics.append({"model": model, "status": "failed", "error": err})
                 if "API_KEY_INVALID" in err or ("400" in err and "key" in err.lower()):
+                    self.last_error_safe = "Invalid Gemini API Key."
                     return False, "Invalid Gemini API Key."
                 if "403" in err or "PERMISSION_DENIED" in err:
+                    self.last_error_safe = f"403 Permission denied: {err}"
                     return False, f"403 Permission denied: {err}"
                 errors.append(f"{model}: {err}")
                 if "401" in err:
                     break
         combined = " | ".join(errors)
+        self.last_error_safe = combined
         if "429" in combined or "RESOURCE_EXHAUSTED" in combined:
             return False, f"Gemini API rate limit/quota reached. Fallback attempted: {PREFERRED_MODELS[-1]}. Details: {combined}"
         if "503" in combined or "overloaded" in combined.lower():
@@ -213,20 +230,25 @@ class GeminiService:
             f"{prompt}"
         )
         models = [self.model_name] + [m for m in PREFERRED_MODELS if m != self.model_name]
+        self.last_failover_diagnostics = []
         for model in models:
             try:
                 response = self._client.models.generate_content(model=model, contents=full_prompt)
                 if response and getattr(response, "text", None):
                     parsed = json.loads(self._extract_json_text(response.text))
+                    self.last_used_model = model
+                    self.last_failover_diagnostics.append({"model": model, "status": "success"})
                     note = f"Generated with Gemini ({model})"
                     if model != self.model_name:
                         note += f" (failover from {self.model_name})"
                     return parsed, True, note
             except Exception as exc:
                 err = _scrub_sensitive_string(exc)
+                self.last_failover_diagnostics.append({"model": model, "status": "failed", "error": err})
                 logger.warning("Gemini model %s generation failed: %s", model, err)
                 if any(marker in err for marker in ("API_KEY_INVALID", "401", "403", "PERMISSION_DENIED")):
                     break
+        self.last_error_safe = f"Failover exhausted across {', '.join(models)}. Deterministic fallback engaged."
         return fallback, False, "Deterministic Fallback (Gemini request failed or quota exceeded)."
 
     @staticmethod
