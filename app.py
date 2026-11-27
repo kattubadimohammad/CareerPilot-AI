@@ -543,7 +543,12 @@ elif nav_selection == "🎯 Job Matcher & ATS":
 
     col_jd_head, col_demo_job, col_clear_job = st.columns([3, 1, 1])
     with col_jd_head:
-        target_title = st.text_input("Target Job Title", value="Senior Backend Cloud Engineer")
+        target_title = st.text_input(
+            "Target Job Title (Optional)",
+            value="",
+            placeholder="Leave blank to infer from job description (e.g., Supply Chain Analyst)",
+            key="target_job_title_input",
+        )
     with col_demo_job:
         st.write(" ")
         load_demo_jd = st.button("📋 Load Sample JD", width="stretch", key="load_sample_jd_btn")
@@ -591,17 +596,20 @@ elif nav_selection == "🎯 Job Matcher & ATS":
                     raw_resume_text = resume_record["raw_text"]
 
                     matcher = JobMatcher(st.session_state.gemini_service)
+                    explicit_title = target_title.strip()
                     match_result = matcher.match_resume_to_job(
                         resume_text=raw_resume_text,
                         resume_skills=resume_skills,
                         job_text=job_description_text,
-                        job_title=target_title,
+                        job_title=explicit_title if explicit_title else "Target Position",
                     )
+
+                    resolved_title = match_result.get("job_title") or explicit_title or "Target Position"
 
                     # Persist to database
                     match_id = db.save_job_match(
                         resume_id=selected_resume_id,
-                        job_title=target_title,
+                        job_title=resolved_title,
                         job_description=job_description_text,
                         match_score=match_result["overall_score"],
                         match_data=match_result,
@@ -672,7 +680,8 @@ elif nav_selection == "🎯 Job Matcher & ATS":
             st.write("Skills alignment: 55% · ATS keyword overlap: 25% · Seniority/experience alignment: 20%.")
             st.write(f"Direct skill matches: {m.get('matched_skills_count', 0)} / {m.get('required_skills_count', 0)}")
             st.write(f"Partial evidence: {m.get('partial_skills_count', 0)}")
-            st.write(f"Seniority evaluated against job title: {m.get('job_title_used_for_seniority', target_title)}")
+            seniority_title = m.get("job_title_used_for_seniority") or "Not specified (evaluated as non-senior)"
+            st.write(f"Seniority evaluated against job title: {seniority_title}")
             if m.get("required_years_experience") is not None:
                 st.write(f"Experience requirement: {m.get('required_years_experience')} years")
             if m.get("candidate_years_experience") is not None:

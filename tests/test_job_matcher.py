@@ -346,3 +346,61 @@ def test_safe_ai_rewrites_blocks_strict_bypass_attempts_and_75pct_loopholes():
     ]
     filtered = JobMatcher._safe_ai_rewrites(bypasses, resume)
     assert filtered == []
+
+
+def test_job_matcher_title_inference_and_override_apptest():
+    """Verify UI leaves Target Job Title blank by default, infers JD titles when empty, and preserves explicit titles."""
+    from pathlib import Path
+    import pymupdf
+    from streamlit.testing.v1 import AppTest
+
+    app_path = str(Path(__file__).resolve().parent.parent / "app.py")
+    at = AppTest.from_file(app_path, default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    # Build and upload a minimal valid PDF resume so Job Matcher has a candidate record in any CI environment
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "JORDAN TAYLOR\nData Analyst\nSkills: Python, SQL, Excel\nExperience: 2 years of experience.", fontsize=10)
+    pdf_bytes = doc.tobytes()
+    doc.close()
+
+    at.sidebar.radio[0].set_value("📄 Resume Intelligence").run()
+    at.file_uploader[0].upload("title_test_resume.pdf", pdf_bytes).run()
+    assert not at.exception
+    assert at.session_state.active_resume_id is not None
+
+    # Navigate to Job Matcher & ATS
+    at.sidebar.radio[0].set_value("🎯 Job Matcher & ATS").run()
+    assert not at.exception
+
+    # 1. Confirm no misleading default title pre-filled
+    title_input = next(ti for ti in at.text_input if "Target Job Title" in ti.label)
+    assert title_input.value == ""
+    assert "Senior Backend Cloud Engineer" not in title_input.value
+
+    # 2. Blank title -> infer from pasted JD and persist resolved title
+    at.text_area[0].set_value("Title: Supply Chain Analyst\nCompany: Retail Ops\nRequirements:\n- Python, SQL, and Excel.").run()
+    run_btn = next(b for b in at.button if "Run Job & ATS Match" in b.label)
+    run_btn.click().run()
+    assert not at.exception
+
+    latest_inferred = at.session_state["latest_match_result"]
+    assert latest_inferred["job_title"] == "Supply Chain Analyst"
+    assert latest_inferred["job_title_used_for_seniority"] == "Supply Chain Analyst"
+    history_df = at.dataframe[0].value
+    assert history_df.iloc[0]["job_title"] == "Supply Chain Analyst"
+
+    # 3. Explicit title entered -> preserve explicit title in result and DB
+    title_input = next(ti for ti in at.text_input if "Target Job Title" in ti.label)
+    title_input.set_value("Senior Supply Chain Strategist").run()
+    run_btn = next(b for b in at.button if "Run Job & ATS Match" in b.label)
+    run_btn.click().run()
+    assert not at.exception
+
+    latest_explicit = at.session_state["latest_match_result"]
+    assert latest_explicit["job_title"] == "Senior Supply Chain Strategist"
+    assert latest_explicit["job_title_used_for_seniority"] == "Senior Supply Chain Strategist"
+    history_df = at.dataframe[0].value
+    assert history_df.iloc[0]["job_title"] == "Senior Supply Chain Strategist"
