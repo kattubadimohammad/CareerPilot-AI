@@ -5,10 +5,7 @@ import zipfile
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
 
-try:
-    import pymupdf as fitz
-except ImportError:
-    import fitz
+import pymupdf
 
 import docx
 
@@ -61,7 +58,7 @@ class DocumentParser:
     def parse_pdf(file_bytes: bytes) -> str:
         """Extract text from PDF using PyMuPDF."""
         try:
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            doc = pymupdf.open(stream=file_bytes, filetype="pdf")
             if doc.page_count == 0:
                 raise DocumentValidationError("The PDF file contains 0 pages.")
 

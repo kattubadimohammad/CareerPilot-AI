@@ -5,7 +5,7 @@ session state preservation, and error handling.
 from io import BytesIO
 from pathlib import Path
 
-import fitz
+import pymupdf
 from docx import Document
 from streamlit.testing.v1 import AppTest
 
@@ -35,7 +35,7 @@ Bachelor of Science in Information Systems
 
 def make_sample_pdf():
     """Build a deterministic PDF fixture at test time."""
-    document = fitz.open()
+    document = pymupdf.open()
     page = document.new_page()
     page.insert_text((72, 72), SAMPLE_RESUME_TEXT, fontsize=10)
     content = document.tobytes()

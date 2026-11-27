@@ -2,16 +2,13 @@
 import io
 import pytest
 import docx
-try:
-    import pymupdf as fitz
-except ImportError:
-    import fitz
+import pymupdf
 
 from src.document_parser import DocumentParser, DocumentValidationError
 
 
 def create_sample_pdf(text: str) -> bytes:
-    doc = fitz.open()
+    doc = pymupdf.open()
     page = doc.new_page()
     page.insert_text((50, 50), text)
     pdf_bytes = doc.tobytes()
@@ -103,3 +100,22 @@ def test_quick_contact_extraction():
     assert contact["name"] == "Charlie Brown"
     assert contact["email"] == "charlie@peanuts.com"
     assert "123-4567" in contact["phone"]
+
+
+def test_pymupdf_supported_import_no_deprecation_warning():
+    import importlib
+    import warnings
+    import src.document_parser as dp_module
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        importlib.reload(dp_module)
+        pdf_bytes = create_sample_pdf("Verification PDF for PyMuPDF import.")
+        text, ftype = dp_module.DocumentParser.extract_text(pdf_bytes, "verify.pdf")
+
+    assert ftype == "pdf"
+    assert "Verification PDF" in text
+    assert hasattr(dp_module, "pymupdf")
+    assert not hasattr(dp_module, "fitz")
+    fitz_warnings = [w for w in caught if "fitz" in str(w.message).lower()]
+    assert len(fitz_warnings) == 0

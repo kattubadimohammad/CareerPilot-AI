@@ -541,26 +541,45 @@ elif nav_selection == "🎯 Job Matcher & ATS":
     else:
         st.warning("Please upload or load a resume first in the Resume Intelligence tab.")
 
-    col_jd_head, col_demo_job = st.columns([3, 1])
+    col_jd_head, col_demo_job, col_clear_job = st.columns([3, 1, 1])
     with col_jd_head:
-        target_title = st.text_input("Target Job Title", value="Senior Backend Cloud Engineer")
+        target_title = st.text_input(
+            "Target Job Title (Optional)",
+            value="",
+            placeholder="Leave blank to infer from job description (e.g., Supply Chain Analyst)",
+            key="target_job_title_input",
+        )
     with col_demo_job:
         st.write(" ")
-        load_demo_jd = st.button("📋 Load Sample JD", width="stretch")
+        load_demo_jd = st.button("📋 Load Sample JD", width="stretch", key="load_sample_jd_btn")
+    with col_clear_job:
+        st.write(" ")
+        clear_jd = st.button("🧹 Clear JD", width="stretch", key="clear_jd_btn")
 
     if "cached_jd_text" not in st.session_state:
         st.session_state.cached_jd_text = ""
 
     if load_demo_jd:
-        st.session_state.cached_jd_text = load_sample_text("sample_job.txt")
+        sample_jd = load_sample_text("sample_job.txt")
+        st.session_state.cached_jd_text = sample_jd
+        st.session_state.job_description_input = sample_jd
         st.rerun()
+
+    if clear_jd:
+        st.session_state.cached_jd_text = ""
+        st.session_state.job_description_input = ""
+        st.rerun()
+
+    if "job_description_input" not in st.session_state:
+        st.session_state.job_description_input = st.session_state.cached_jd_text
 
     job_description_text = st.text_area(
         "Paste Job Description",
-        value=st.session_state.cached_jd_text,
         height=220,
         placeholder="Paste full job description including requirements and responsibilities here...",
+        key="job_description_input",
     )
+    st.session_state.cached_jd_text = job_description_text
 
     if st.button("⚡ Run Job & ATS Match", type="primary", width="stretch"):
         if not selected_resume_id:
@@ -577,17 +596,20 @@ elif nav_selection == "🎯 Job Matcher & ATS":
                     raw_resume_text = resume_record["raw_text"]
 
                     matcher = JobMatcher(st.session_state.gemini_service)
+                    explicit_title = target_title.strip()
                     match_result = matcher.match_resume_to_job(
                         resume_text=raw_resume_text,
                         resume_skills=resume_skills,
                         job_text=job_description_text,
-                        job_title=target_title,
+                        job_title=explicit_title if explicit_title else "Target Position",
                     )
+
+                    resolved_title = match_result.get("job_title") or explicit_title or "Target Position"
 
                     # Persist to database
                     match_id = db.save_job_match(
                         resume_id=selected_resume_id,
-                        job_title=target_title,
+                        job_title=resolved_title,
                         job_description=job_description_text,
                         match_score=match_result["overall_score"],
                         match_data=match_result,
@@ -641,6 +663,30 @@ elif nav_selection == "🎯 Job Matcher & ATS":
             else:
                 st.success("All target technical skills matched!")
 
+        partial_skills = m.get("partially_matched_skills", [])
+        if partial_skills:
+            st.markdown(f"#### ◐ Related Evidence — Review ({len(partial_skills)})")
+            st.caption("Related wording was found, but it is not treated as a confirmed skill match.")
+            partial_pills = " ".join(
+                [f"<span class='skill-pill pill-neutral'>◐ {html.escape(str(skill))}</span>" for skill in partial_skills]
+            )
+            st.markdown(partial_pills, unsafe_allow_html=True)
+            with st.expander("Why these requirements were partially matched"):
+                for skill in partial_skills:
+                    reason = m.get("skill_evidence", {}).get(skill, {}).get("reason", "Related evidence found")
+                    st.write(f"- **{skill}:** {reason}")
+
+        with st.expander("How the compatibility score is calculated"):
+            st.write("Skills alignment: 55% · ATS keyword overlap: 25% · Seniority/experience alignment: 20%.")
+            st.write(f"Direct skill matches: {m.get('matched_skills_count', 0)} / {m.get('required_skills_count', 0)}")
+            st.write(f"Partial evidence: {m.get('partial_skills_count', 0)}")
+            seniority_title = m.get("job_title_used_for_seniority") or "Not specified (evaluated as non-senior)"
+            st.write(f"Seniority evaluated against job title: {seniority_title}")
+            if m.get("required_years_experience") is not None:
+                st.write(f"Experience requirement: {m.get('required_years_experience')} years")
+            if m.get("candidate_years_experience") is not None:
+                st.write(f"Resume-stated experience: {m.get('candidate_years_experience')} years")
+
         # High-Frequency ATS Keywords
         st.markdown("#### 🔍 High-Frequency Job Posting Keywords")
         kw_pills = " ".join([f"<span class='skill-pill pill-neutral'>{html.escape(str(kw))}</span>" for kw in m.get("top_keywords", [])])
@@ -658,6 +704,17 @@ elif nav_selection == "🎯 Job Matcher & ATS":
         st.markdown("#### 📋 ATS Recommendations")
         for rec in m.get("recommendations", []):
             st.info(rec)
+
+    # Persisted match history for the selected candidate.
+    st.divider()
+    st.subheader("🕒 Recent Job Match History")
+    recent_matches = db.list_job_matches(limit=10)
+    candidate_matches = [item for item in recent_matches if item.get("resume_id") == selected_resume_id]
+    if candidate_matches:
+        history_df = pd.DataFrame(candidate_matches)
+        st.dataframe(history_df, width="stretch", hide_index=True)
+    else:
+        st.caption("No saved job matches are available for this resume yet.")
 
 
 # ==============================================================================
