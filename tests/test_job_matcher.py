@@ -207,3 +207,142 @@ def test_job_matcher_clear_jd_button_apptest():
     assert not at.exception
     assert at.text_area[0].value == ""
     assert at.session_state["active_resume_data"]["candidate_name"] == "Alex Morgan"
+
+
+def test_job_title_detection_explicit_inferred_and_missing():
+    """Verify explicit, JD-labeled, inferred, and missing job titles do not get blocked by default placeholder."""
+    matcher = JobMatcher()
+
+    # 1. Explicit passed title always takes precedence over JD body or label
+    explicit = JobMatcher._resolve_job_title("Title: Senior Director\nRequirements: SQL", "Data Analyst")
+    assert explicit == "Data Analyst"
+
+    # 2. Default 'Target Position' must NOT block extraction of explicit JD title labels (e.g. Title:, Position:)
+    jd_labeled = "Title: Senior Supply Chain Analyst\nCompany: Global Retail\nRequires Python, SQL."
+    res_labeled = matcher.match_resume_to_job("Analyst with 2 years of experience. Python SQL.", ["Python", "SQL"], jd_labeled)
+    assert res_labeled["job_title"] == "Senior Supply Chain Analyst"
+    assert res_labeled["job_title_used_for_seniority"] == "Senior Supply Chain Analyst"
+    assert res_labeled["sub_scores"]["seniority_experience_alignment"] == 75.0
+
+    # 3. Inferred from standalone heading or hiring phrase when placeholder is used
+    jd_heading = "# Lead Data Engineer\nCompany: Cloud Data Inc.\nRequires Python and SQL."
+    assert JobMatcher._resolve_job_title(jd_heading, "Target Position") == "Lead Data Engineer"
+
+    jd_hiring = "We are seeking a Principal Analytics Engineer to build scalable ETL workflows."
+    assert JobMatcher._resolve_job_title(jd_hiring, "Target Position") == "Principal Analytics Engineer"
+
+    # 4. Missing title: body mentions ('reports to senior manager') must NOT trigger false seniority
+    jd_missing = "The analyst reports to a senior manager.\nRequirements: Python, SQL."
+    res_missing = matcher.match_resume_to_job("Analyst with Python and SQL.", ["Python", "SQL"], jd_missing)
+    assert res_missing["job_title"] == "Target Position"
+    assert res_missing["job_title_used_for_seniority"] == ""
+    assert res_missing["sub_scores"]["seniority_experience_alignment"] == 90.0
+
+
+def test_safe_ai_rewrites_rejects_all_unsupported_claim_categories():
+    """Ensure fail-closed validation rejects unsupported tools, employers, qualifications, dates, metrics, and achievements."""
+    resume = (
+        "Data Operations Analyst at Flipkart (Sep 2024 - Sep 2026).\n"
+        "Built MIS reports and KPI dashboards using Advanced Excel and SQL across 16+ product verticals, "
+        "improving Instock availability to 98% and reducing stockouts by 25%. "
+        "Managed inventory for 25 units in pilot testing."
+    )
+
+    unsupported_rewrites = [
+        # Unsupported tools (in-taxonomy and out-of-taxonomy)
+        {"original_theme": "Tool1", "suggested_rewrite": "Built Snowflake and Looker dashboards using SQL.", "justification": "t"},
+        {"original_theme": "Tool2", "suggested_rewrite": "Orchestrated SAP HANA procurement workflows using Excel.", "justification": "t"},
+        # Unsupported employers
+        {"original_theme": "Emp1", "suggested_rewrite": "Built SQL dashboards at Amazon Logistics.", "justification": "e"},
+        {"original_theme": "Emp2", "suggested_rewrite": "Supported KPI reporting for Horizon Systems Inc.", "justification": "e"},
+        # Unsupported qualifications / credentials
+        {"original_theme": "Qual1", "suggested_rewrite": "Applied PMP certification to build KPI dashboards using SQL.", "justification": "q"},
+        {"original_theme": "Qual2", "suggested_rewrite": "MBA graduate who built SQL KPI dashboards.", "justification": "q"},
+        {"original_theme": "Qual3", "suggested_rewrite": "AWS Certified analyst maintaining Excel reports.", "justification": "q"},
+        # Unsupported dates / durations
+        {"original_theme": "Date1", "suggested_rewrite": "Built SQL KPI dashboards from January 2019 to December 2020.", "justification": "d"},
+        {"original_theme": "Date2", "suggested_rewrite": "Delivered Q4 Excel dashboards for Flipkart.", "justification": "d"},
+        {"original_theme": "Date3", "suggested_rewrite": "Built SQL dashboards over 5 years.", "justification": "d"},
+        # Unsupported metrics / scale mismatches
+        {"original_theme": "Met1", "suggested_rewrite": "Reduced stockouts by 45% using SQL.", "justification": "m"},
+        {"original_theme": "Met2", "suggested_rewrite": "Managed 25% growth across pilot testing.", "justification": "m"},  # 25 units != 25%
+        {"original_theme": "Met3", "suggested_rewrite": "Managed 16+ engineers using Advanced Excel.", "justification": "m"},  # 16+ verticals != engineers
+        {"original_theme": "Met4", "suggested_rewrite": "Doubled Instock availability using SQL.", "justification": "m"},
+        # Unsupported achievements / lowercase fabrication
+        {"original_theme": "Ach1", "suggested_rewrite": "Negotiated supplier contracts achieving revenue savings using SQL.", "justification": "a"},
+        {"original_theme": "Ach2", "suggested_rewrite": "Led global enterprise cost transformation with Advanced Excel.", "justification": "a"},
+    ]
+
+    filtered = JobMatcher._safe_ai_rewrites(unsupported_rewrites, resume)
+    assert filtered == []
+
+
+def test_safe_ai_rewrites_preserves_fully_grounded_rewrites():
+    """Verify faithful rewrites using only resume-verified facts, tools, employers, and metrics pass."""
+    resume = (
+        "Data Operations Analyst at Flipkart (Sep 2024 - Sep 2026).\n"
+        "Built MIS reports and KPI dashboards using Advanced Excel and SQL across 16+ product verticals, "
+        "improving Instock availability to 98% and reducing stockouts by 25%."
+    )
+    faithful_rewrites = [
+        {
+            "original_theme": "Inventory KPI Reporting",
+            "suggested_rewrite": "Built MIS reports and KPI dashboards at Flipkart using Advanced Excel and SQL across 16+ product verticals, improving Instock availability to 98% and reducing stockouts by 25%.",
+            "justification": "Highlights verified KPI impact and tools.",
+        }
+    ]
+    filtered = JobMatcher._safe_ai_rewrites(faithful_rewrites, resume)
+    assert len(filtered) == 1
+    assert "98%" in filtered[0]["suggested_rewrite"]
+    assert "Flipkart" in filtered[0]["suggested_rewrite"]
+
+
+def test_safe_ai_rewrites_preserves_legitimate_variants_and_abbreviations():
+    """Verify legitimate bullets with bullets, plural acronyms, morphological lemmas, slashes, and possessives pass."""
+    resume = (
+        "Data Operations Analyst at Flipkart (Sep 2024 - Sep 2026).\n"
+        "Analyzed operational data with Python, SQL, CI/CD, and REST APIs. "
+        "Built KPI dashboards and optimized workflows saving $120,000."
+    )
+    legitimate = [
+        {
+            "original_theme": "Morphological & Framing",
+            "suggested_rewrite": "• Applied Python/SQL to analyze operational data with REST API.",
+            "justification": "Morphological lemma + slash + singular API.",
+        },
+        {
+            "original_theme": "Possessive & Acronym Plural",
+            "suggested_rewrite": "Built KPIs dashboard at Flipkart's workflows using optimization for $120000.",
+            "justification": "Plural acronym + possessive + comma normalization.",
+        },
+    ]
+    filtered = JobMatcher._safe_ai_rewrites(legitimate, resume)
+    assert len(filtered) == 2
+
+
+def test_safe_ai_rewrites_blocks_strict_bypass_attempts_and_75pct_loopholes():
+    """Ensure zero-tolerance grounding closes 75% padding, index-0 employers, alphanumeric tools, and unit swaps."""
+    resume = (
+        "Analyzed operational datasets using SQL and Excel across 16+ product verticals to monitor inventory and weekly reporting. "
+        "Completed pilot in 30 days. Graduated 2020; certified project 2023."
+    )
+    bypasses = [
+        # Long grounded bullet + 2 ungrounded words (previously passed >= 75% threshold)
+        {"original_theme": "Padding", "suggested_rewrite": "Analyzed operational datasets using SQL and Excel across 16+ product verticals to monitor inventory, weekly reporting, and automated invoicing.", "justification": "75% pad"},
+        # Ungrounded evaluative adjective
+        {"original_theme": "Adj", "suggested_rewrite": "Analyzed datasets using accurate scalable SQL reporting.", "justification": "Adjective claim"},
+        # Index-0 unsupported employer
+        {"original_theme": "Idx0Emp", "suggested_rewrite": "Deloitte analyst analyzing datasets using SQL and Excel.", "justification": "Index 0 employer"},
+        # Lowercase employer / lowercase unknown tool / alphanumeric tool code
+        {"original_theme": "LowerEmp", "suggested_rewrite": "Analyzed operational datasets using SQL and Excel at amazon.", "justification": "Lowercase employer"},
+        {"original_theme": "LowerTool", "suggested_rewrite": "Analyzed operational datasets using SQL, Excel, and duckdb.", "justification": "Lowercase tool"},
+        {"original_theme": "Alnum", "suggested_rewrite": "Analyzed operational datasets using SQL, Excel, and s3.", "justification": "Alphanumeric code"},
+        # Spelled numbers & swapped unit contexts
+        {"original_theme": "Spelled", "suggested_rewrite": "Analyzed ten operational datasets using SQL.", "justification": "Spelled number"},
+        {"original_theme": "UnitSwap", "suggested_rewrite": "Delivered 30 dashboards using SQL and Excel.", "justification": "30 days != 30 dashboards"},
+        # Ambiguous month May & spliced year range
+        {"original_theme": "MayDate", "suggested_rewrite": "Analyzed operational datasets in May using SQL.", "justification": "Month May"},
+        {"original_theme": "SplicedDate", "suggested_rewrite": "Analyzed operational datasets 2020-2023 using SQL.", "justification": "Spliced range"},
+    ]
+    filtered = JobMatcher._safe_ai_rewrites(bypasses, resume)
+    assert filtered == []
