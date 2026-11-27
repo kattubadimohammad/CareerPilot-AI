@@ -541,26 +541,40 @@ elif nav_selection == "🎯 Job Matcher & ATS":
     else:
         st.warning("Please upload or load a resume first in the Resume Intelligence tab.")
 
-    col_jd_head, col_demo_job = st.columns([3, 1])
+    col_jd_head, col_demo_job, col_clear_job = st.columns([3, 1, 1])
     with col_jd_head:
         target_title = st.text_input("Target Job Title", value="Senior Backend Cloud Engineer")
     with col_demo_job:
         st.write(" ")
-        load_demo_jd = st.button("📋 Load Sample JD", width="stretch")
+        load_demo_jd = st.button("📋 Load Sample JD", width="stretch", key="load_sample_jd_btn")
+    with col_clear_job:
+        st.write(" ")
+        clear_jd = st.button("🧹 Clear JD", width="stretch", key="clear_jd_btn")
 
     if "cached_jd_text" not in st.session_state:
         st.session_state.cached_jd_text = ""
 
     if load_demo_jd:
-        st.session_state.cached_jd_text = load_sample_text("sample_job.txt")
+        sample_jd = load_sample_text("sample_job.txt")
+        st.session_state.cached_jd_text = sample_jd
+        st.session_state.job_description_input = sample_jd
         st.rerun()
+
+    if clear_jd:
+        st.session_state.cached_jd_text = ""
+        st.session_state.job_description_input = ""
+        st.rerun()
+
+    if "job_description_input" not in st.session_state:
+        st.session_state.job_description_input = st.session_state.cached_jd_text
 
     job_description_text = st.text_area(
         "Paste Job Description",
-        value=st.session_state.cached_jd_text,
         height=220,
         placeholder="Paste full job description including requirements and responsibilities here...",
+        key="job_description_input",
     )
+    st.session_state.cached_jd_text = job_description_text
 
     if st.button("⚡ Run Job & ATS Match", type="primary", width="stretch"):
         if not selected_resume_id:

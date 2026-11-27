@@ -155,3 +155,55 @@ def test_no_job_skills_uses_neutral_skill_alignment_and_score_is_bounded():
     )
     assert score["sub_scores"]["skills_alignment"] == 70.0
     assert 0.0 <= score["overall_score"] <= 100.0
+
+
+def test_job_matcher_clear_jd_button_apptest():
+    """Verify Clear JD sits beside Load Sample JD and clears the job description safely."""
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+
+    app_path = str(Path(__file__).resolve().parent.parent / "app.py")
+    at = AppTest.from_file(app_path, default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    # Seed active session state from another workflow to verify Clear JD doesn't disturb it
+    at.session_state["active_resume_data"] = {"candidate_name": "Alex Morgan", "skills": ["Python"]}
+    at.sidebar.radio[0].set_value("🎯 Job Matcher & ATS").run()
+    assert not at.exception
+
+    btn_labels = [b.label for b in at.button]
+    assert "📋 Load Sample JD" in btn_labels
+    assert "🧹 Clear JD" in btn_labels
+
+    # 1. Enter custom JD manually and clear it
+    at.text_area[0].set_value("Custom Supply Chain Analyst Job Description").run()
+    assert not at.exception
+    assert at.text_area[0].value == "Custom Supply Chain Analyst Job Description"
+    assert at.session_state["cached_jd_text"] == "Custom Supply Chain Analyst Job Description"
+
+    clear_btn = next(b for b in at.button if b.label == "🧹 Clear JD")
+    clear_btn.click().run()
+    assert not at.exception
+    assert at.text_area[0].value == ""
+    assert at.session_state["cached_jd_text"] == ""
+
+    # 2. Verify cached_jd_text populated in session state also clears cleanly
+    at.session_state["cached_jd_text"] = "Cached Sample JD Content"
+    at.session_state["job_description_input"] = "Cached Sample JD Content"
+    at.run()
+    assert at.text_area[0].value == "Cached Sample JD Content"
+
+    clear_btn = next(b for b in at.button if b.label == "🧹 Clear JD")
+    clear_btn.click().run()
+    assert not at.exception
+    assert at.text_area[0].value == ""
+    assert at.session_state["cached_jd_text"] == ""
+
+    # 3. Navigate away and back to verify cleared state persists and other workflow state stays intact
+    at.sidebar.radio[0].set_value("📊 Executive Dashboard").run()
+    assert not at.exception
+    at.sidebar.radio[0].set_value("🎯 Job Matcher & ATS").run()
+    assert not at.exception
+    assert at.text_area[0].value == ""
+    assert at.session_state["active_resume_data"]["candidate_name"] == "Alex Morgan"
